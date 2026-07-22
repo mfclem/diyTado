@@ -1,0 +1,38 @@
+name: Sync FROM Google Apps Script
+
+on:
+  workflow_dispatch: # 👈 C'est ce qui crée le bouton "Lancer manuellement"
+
+jobs:
+  sync-to-github:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # Autorise l'action à modifier le code sur GitHub
+
+    steps:
+      - name: Checkout du code
+        uses: actions/checkout@v4
+
+      - name: Configuration de Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Installation de Clasp
+        run: npm install -g @google/clasp
+
+      - name: Création du fichier d'authentification
+        run: echo "$CLASPRC_JSON" > ~/.clasprc.json
+        env:
+          CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+
+      - name: Récupérer le code depuis Google (Clasp Pull)
+        run: clasp pull
+
+      - name: Sauvegarder les modifications sur GitHub
+        run: |
+          git config --global user.name "GitHub Action Bot"
+          git config --global user.email "action@github.com"
+          git add .
+          git commit -m "🔄 Synchro depuis script.google.com" || echo "Aucune modification à synchroniser"
+          git push
