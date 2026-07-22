@@ -136,7 +136,7 @@ function apiReportState() {
 */
 
 function apiReportState() {
-  callHomeGraphApi('devices:reportStateAndNotification', 'post', newGenerateTadoReportStatePayload());
+  callHomeGraphApi('devices:reportStateAndNotification', 'post', generateTadoReportStatePayload());
 }
 
 function apiSync() {
@@ -167,9 +167,9 @@ function apiDeleteAgentUser() {
 /**
  * Génère le payload brut pour le Report State de Homegraph à partir des appareils Tado.
  * 
- * @param {string} agentUserId - L'identifiant unique de l'utilisateur dans votre système.
  * @return {Object} L'objet JavaScript représentant le payload complet.
  */
+/*
 function generateTadoReportStatePayload() {
   // Initialiser le client Tado (utilise les tokens stockés)
   var t = Tado.create();
@@ -241,9 +241,9 @@ function generateTadoReportStatePayload() {
 
   return payload;
 }
+*/
 
-
-function newGenerateTadoReportStatePayload() {
+function generateTadoReportStatePayload() {
   var homeId = HOME_ID;
   var devices = JSON.parse(PropertiesService.getScriptProperties().getProperty('GH_DEVICES') || "[]");
   var tado = tadoClient_();
