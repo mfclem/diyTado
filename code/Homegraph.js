@@ -257,7 +257,7 @@ function newGenerateTadoReportStatePayload() {
   
         var state = {
           online: true,
-          thermostatMode: isOn ? 'heat' : 'off'
+          thermostatMode: (isOn ? 'heat' : 'off')
         };
         if (sensor.insideTemperature && typeof sensor.insideTemperature.value === 'number') {
           state.thermostatTemperatureAmbient = sensor.insideTemperature.value;
