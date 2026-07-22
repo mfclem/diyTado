@@ -116,6 +116,7 @@ function apiRequestSync() {
   });
 }
 
+/*
 function apiReportState() {
   callHomeGraphApi('devices:reportStateAndNotification', 'post', {
     requestId: Utilities.getUuid(),
@@ -131,6 +132,11 @@ function apiReportState() {
       }
     }
   });
+}
+*/
+
+function apiReportState() {
+  callHomeGraphApi('devices:reportStateAndNotification', 'post', newGenerateTadoReportStatePayload());
 }
 
 function apiSync() {
