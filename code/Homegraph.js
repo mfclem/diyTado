@@ -274,7 +274,7 @@ function newGenerateTadoReportStatePayload() {
         states[d.id] = state;
       }
     }
-  }
+  });
   
   // Assembler et retourner le payload final
 
