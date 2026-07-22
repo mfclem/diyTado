@@ -239,7 +239,7 @@ function generateTadoReportStatePayload() {
 
 function newGenerateTadoReportStatePayload() {
   var homeId = HOME_ID;
-  var devices = JSON.parse(PropertiesService.getScriptProperties().getProperty('GH_DEVICES') || "{}");
+  var devices = JSON.parse(PropertiesService.getScriptProperties().getProperty('GH_DEVICES') || "[]");
   var tado = tadoClient_();
   
   // One rooms call, indexed by room id, reused for every requested device.
