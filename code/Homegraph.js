@@ -235,3 +235,59 @@ function generateTadoReportStatePayload() {
 
   return payload;
 }
+
+
+function newGenerateTadoReportStatePayload() {
+  var homeId = HOME_ID;
+  var devices = PropertiesService.getScriptProperties().getProperty('GH_DEVICES'); || [];
+  var tado = tadoClient_();
+  
+  // One rooms call, indexed by room id, reused for every requested device.
+  var roomsById = indexRoomsById_(tado.getRooms(homeId) || []);
+
+  var states = {};
+  devices.forEach(function (d) {
+    var parsed = parseDeviceId_(d.id);
+    if (parsed.kind === 'room') {
+      var room = roomsById[parsed.roomId];
+      if (room) {
+        var sensor  = room.sensorDataPoints || {};
+        var setting = room.setting || {};
+        var isOn    = setting.power === 'ON';
+  
+        var state = {
+          online: true,
+          thermostatMode: isOn ? 'heat' : 'off'
+        };
+        if (sensor.insideTemperature && typeof sensor.insideTemperature.value === 'number') {
+          state.thermostatTemperatureAmbient = sensor.insideTemperature.value;
+        }
+        if (sensor.humidity && typeof sensor.humidity.percentage === 'number') {
+          state.thermostatHumidityAmbient = sensor.humidity.percentage;
+        }
+        if (setting.temperature && typeof setting.temperature.value === 'number') {
+          state.thermostatTemperatureSetpoint = setting.temperature.value;
+        } else if (!isOn && typeof state.thermostatTemperatureAmbient === 'number') {
+          // Google requires a setpoint even when off; echo ambient as a placeholder.
+          state.thermostatTemperatureSetpoint = state.thermostatTemperatureAmbient;
+        }
+        states[d.id] = state;
+      }
+  }
+  
+  // Assembler et retourner le payload final
+
+  var payload = {
+    "requestId": Utilities.getUuid(),
+    "agentUserId": AGENT_USER_ID,
+    "payload": {
+      "devices": {
+        "states": states
+      }
+    }
+  };
+
+  Logger.log("Report new state payload: " + JSON.stringify(payload));
+
+  return payload;
+}
