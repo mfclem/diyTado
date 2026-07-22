@@ -1,7 +1,6 @@
 /**
  * PARAMÈTRES DU COMPTE DE SERVICE
  */
-/* tt r */
 const SERVICE_ACCOUNT_EMAIL = PropertiesService.getScriptProperties().getProperty('SERVICE_ACCOUNT_EMAIL');
 const PRIVATE_KEY = PropertiesService.getScriptProperties().getProperty('SERVICE_ACCOUNT_PRIVATE_KEY').replace(/\\n/g, '\n');
 const AGENT_USER_ID = PropertiesService.getScriptProperties().getProperty('GH_AGENT_USER_ID');
