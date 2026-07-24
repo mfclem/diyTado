@@ -136,7 +136,12 @@ function apiReportState() {
 */
 
 function apiReportState() {
-  callHomeGraphApi('devices:reportStateAndNotification', 'post', generateTadoReportStatePayload());
+  var sync = apiSync();
+  var devices = (sync && sync.payload && sync.payload.devices) || [];
+  callHomeGraphApi('devices:reportStateAndNotification', 'post', {
+    "requestId": Utilities.getUuid(),
+    "agentUserId": AGENT_USER_ID,
+    "payload": generateReportStatePayload(devices));
 }
 
 function apiSync() {
@@ -243,9 +248,9 @@ function generateTadoReportStatePayload() {
 }
 */
 
-function generateTadoReportStatePayload() {
+function generateReportStatePayload(devices) {
   var homeId = HOME_ID;
-  var devices = JSON.parse(PropertiesService.getScriptProperties().getProperty('GH_DEVICES') || "[]");
+  // var devices = JSON.parse(PropertiesService.getScriptProperties().getProperty('GH_DEVICES') || "[]");
   var tado = tadoClient_();
   
   // One rooms call, indexed by room id, reused for every requested device.
@@ -285,12 +290,8 @@ function generateTadoReportStatePayload() {
   // Assembler et retourner le payload final
 
   var payload = {
-    "requestId": Utilities.getUuid(),
-    "agentUserId": AGENT_USER_ID,
-    "payload": {
-      "devices": {
-        "states": states
-      }
+    "devices": {
+      "states": states
     }
   };
 
