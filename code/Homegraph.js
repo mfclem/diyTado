@@ -110,7 +110,7 @@ function callHomeGraphApi(endpoint, method, payload) {
  */
 
 function apiRequestSync() {
-  callHomeGraphApi('devices:requestSync', 'post', {
+  return callHomeGraphApi('devices:requestSync', 'post', {
     agentUserId: AGENT_USER_ID,
     async: false
   });
@@ -136,39 +136,48 @@ function apiReportState() {
 */
 
 function apiReportState() {
-  var sync = apiSync();
-  var devices = (sync && sync.payload && sync.payload.devices) || [];
-  callHomeGraphApi('devices:reportStateAndNotification', 'post', {
+  return callHomeGraphApi('devices:reportStateAndNotification', 'post', {
     "requestId": Utilities.getUuid(),
     "agentUserId": AGENT_USER_ID,
-    "payload": generateReportStatePayload(devices)
+    "payload": generateReportStatePayload(getSyncDevicesIds())
   });
 }
 
 function apiSync() {
-  callHomeGraphApi('devices:sync', 'post', {
+  return callHomeGraphApi('devices:sync', 'post', {
     requestId: Utilities.getUuid(),
     agentUserId: AGENT_USER_ID
   });
 }
 
 function apiQuery() {
-  callHomeGraphApi('devices:query', 'post', {
+  return callHomeGraphApi('devices:query', 'post', {
     requestId: Utilities.getUuid(),
     agentUserId: AGENT_USER_ID,
     inputs: [{
       payload: {
-        devices: [{ id: "id_de_votre_appareil" }]
+        devices: getSyncDevicesIds();
       }
     }]
   });
 }
 
 function apiDeleteAgentUser() {
-  const endpoint = 'agentUsers/' + encodeURIComponent(AGENT_USER_ID);
-  callHomeGraphApi(endpoint, 'delete', null);
+  // const endpoint = 'agentUsers/' + encodeURIComponent(AGENT_USER_ID);
+  return callHomeGraphApi('agentUsers/' + encodeURIComponent(AGENT_USER_ID), 'delete', null);
 }
 
+
+function getSyncDevicesIds() {
+  var sync = apiSync();
+  var devices = (sync && sync.payload && sync.payload.devices) || [];
+  var devicesIds = [];
+  devices.forEach(function (d) {
+    if (d.id) devicesIds.push({id: d.id});
+  });
+  Logger.log("Devices Ids:" + JSON.stringify(devidesIds));
+  return devicesIds;
+}
 
 /**
  * Génère le payload brut pour le Report State de Homegraph à partir des appareils Tado.
