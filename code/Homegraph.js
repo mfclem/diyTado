@@ -2,8 +2,8 @@
  * PARAMÈTRES DU COMPTE DE SERVICE
  */
 const SERVICE_ACCOUNT_EMAIL = PropertiesService.getScriptProperties().getProperty('SERVICE_ACCOUNT_EMAIL');
-const PRIVATE_KEY = PropertiesService.getScriptProperties().getProperty('SERVICE_ACCOUNT_PRIVATE_KEY').replace(/\\n/g, '\n');
-const AGENT_USER_ID = PropertiesService.getScriptProperties().getProperty('GH_AGENT_USER_ID');
+const SERVICE_ACCOUNT_PRIVATE_KEY = PropertiesService.getScriptProperties().getProperty('SERVICE_ACCOUNT_PRIVATE_KEY').replace(/\\n/g, '\n');
+const AGENT_USER_ID = PropertiesService.getScriptProperties().getProperty(GH.AGENT_USER_ID);
 
 /**
  * Génère un jeton d'accès OAuth2 (Access Token) sans aucune bibliothèque externe.
@@ -36,7 +36,7 @@ function getAccessToken() {
   const toSign = base64UrlEncode(header) + "." + base64UrlEncode(claimSet);
 
   // 3. Signature RSA-SHA256 de la clé privée
-  const signatureBytes = Utilities.computeRsaSha256Signature(toSign, PRIVATE_KEY);
+  const signatureBytes = Utilities.computeRsaSha256Signature(toSign, SERVICE_ACCOUNT_PRIVATE_KEY);
   const signature = Utilities.base64EncodeWebSafe(signatureBytes).replace(/=+$/, '');
   const jwt = toSign + "." + signature;
 
