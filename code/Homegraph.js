@@ -175,7 +175,7 @@ function getSyncDevicesIds() {
   devices.forEach(function (d) {
     if (d.id) devicesIds.push({id: d.id});
   });
-  Logger.log("Devices Ids:" + JSON.stringify(devidesIds));
+  Logger.log("Devices Ids:" + JSON.stringify(devicesIds));
   return devicesIds;
 }
 
