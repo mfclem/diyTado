@@ -105,7 +105,7 @@ function callHomeGraphApi(endpoint, method, payload) {
 
 /**
  * ==========================================
- * EXEMPLES D'EXÉCUTION DE L'API HOME GRAPH
+ * EXÉCUTIONS DE L'API HOME GRAPH
  * ==========================================
  */
 
@@ -116,30 +116,13 @@ function apiRequestSync() {
   });
 }
 
-/*
-function apiReportState() {
-  callHomeGraphApi('devices:reportStateAndNotification', 'post', {
+function apiReportStateAndNotification() {
+  return callHomeGraphApi('devices:reportStateAndNotification', 'post', {
     requestId: Utilities.getUuid(),
     agentUserId: AGENT_USER_ID,
     payload: {
-      devices: {
-        states: {
-          "id_de_votre_appareil": { 
-            "on": true,
-            "online": true
-          }
-        }
-      }
+      devices: generateStatesAndNotifications(getSyncDevicesIds())
     }
-  });
-}
-*/
-
-function apiReportState() {
-  return callHomeGraphApi('devices:reportStateAndNotification', 'post', {
-    "requestId": Utilities.getUuid(),
-    "agentUserId": AGENT_USER_ID,
-    "payload": generateReportStatePayload(getSyncDevicesIds())
   });
 }
 
@@ -163,10 +146,10 @@ function apiQuery() {
 }
 
 function apiDeleteAgentUser() {
-  // const endpoint = 'agentUsers/' + encodeURIComponent(AGENT_USER_ID);
   return callHomeGraphApi('agentUsers/' + encodeURIComponent(AGENT_USER_ID), 'delete', null);
 }
 
+/* Content functions */
 
 function getSyncDevicesIds() {
   var sync = apiSync();
@@ -175,97 +158,14 @@ function getSyncDevicesIds() {
   devices.forEach(function (d) {
     if (d.id) devicesIds.push({id: d.id});
   });
-  Logger.log("Devices Ids:" + JSON.stringify(devicesIds));
+  Logger.log("Devices Ids:" + JSON.stringify(devicesIds, null, 2));
   return devicesIds;
 }
 
-/**
- * Génère le payload brut pour le Report State de Homegraph à partir des appareils Tado.
- * 
- * @return {Object} L'objet JavaScript représentant le payload complet.
- */
-/*
-function generateTadoReportStatePayload() {
-  // Initialiser le client Tado (utilise les tokens stockés)
-  var t = Tado.create();
-  
-  var homeId = HOME_ID;
-  
-  // Récupérer l'état des pièces via l'API Tado°X
-  var rooms = t.getRooms(homeId);
-  var states = {};
-  
-  // Parcourir chaque pièce et construire l'objet "states"
-  rooms.forEach(function(room) {
-    var deviceId = room.id.toString(); 
-    
-    var mode = "off";
-    var ambientTemp = 20.0;
-    var setpointTemp = 20.0;
-    var humidity = 50.0;
-    
-    // Récupération des données des capteurs (Température ambiante et Humidité)
-    if (room.sensorData) {
-      if (room.sensorData.temperature) {
-        ambientTemp = room.sensorData.temperature.celsius || room.sensorData.temperature.value || ambientTemp;
-      }
-      if (room.sensorData.humidity) {
-        humidity = room.sensorData.humidity.percentage || room.sensorData.humidity.value || humidity;
-      }
-    }
-    
-    // Récupération des réglages (Mode et Consigne)
-    if (room.setting) {
-      if (room.setting.power === "ON") {
-        mode = "heat";
-        if (room.setting.temperature) {
-          setpointTemp = room.setting.temperature.celsius || room.setting.temperature.value || ambientTemp;
-        }
-      } else {
-        mode = "off";
-      }
-    }
-    
-    // Construction de l'état pour l'appareil courant
-    states[deviceId] = {
-      "online": true,
-      "thermostatMode": mode,
-      "thermostatTemperatureAmbient": parseFloat(ambientTemp.toFixed(1)),
-      "thermostatHumidityAmbient": parseFloat(humidity.toFixed(1))
-    };
-    
-    // Ajouter la consigne uniquement si le chauffage est actif
-    if (mode === "heat") {
-      states[deviceId]["thermostatTemperatureSetpoint"] = parseFloat(setpointTemp.toFixed(1));
-    }
-  });
-
-  // Assembler et retourner le payload final
-
-  var payload = {
-    "requestId": Utilities.getUuid(),
-    "agentUserId": AGENT_USER_ID,
-    "payload": {
-      "devices": {
-        "states": states
-      }
-    }
-  };
-
-  Logger.log("Report state payload: " + JSON.stringify(payload));
-
-  return payload;
-}
-*/
-
-function generateReportStatePayload(devices) {
-  var homeId = HOME_ID;
-  // var devices = JSON.parse(PropertiesService.getScriptProperties().getProperty('GH_DEVICES') || "[]");
+function generateStatesAndNotifications(devices) {
   var tado = tadoClient_();
-  
   // One rooms call, indexed by room id, reused for every requested device.
-  var roomsById = indexRoomsById_(tado.getRooms(homeId) || []);
-
+  var roomsById = indexRoomsById_(tado.getRooms(HOME_ID) || []);
   var states = {};
   devices.forEach(function (d) {
     var parsed = parseDeviceId_(d.id);
@@ -296,16 +196,9 @@ function generateReportStatePayload(devices) {
       }
     }
   });
-  
-  // Assembler et retourner le payload final
-
-  var payload = {
-    "devices": {
-      "states": states
-    }
+  var statesAndNotifications = {
+    states: states
   };
-
-  Logger.log("Report new state payload: " + JSON.stringify(payload));
-
-  return payload;
+  Logger.log("States and Notifications: " + JSON.stringify(statesAndNotifications, nill, 2));
+  return statesAndNotifications;
 }
