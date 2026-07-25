@@ -1,5 +1,5 @@
 /**
- * PAR AMÈTRES DU COMPTE DE SERVICE
+ * PARAMÈTRES DU COMPTE DE SERVICE
  */
 const SERVICE_ACCOUNT_EMAIL = PropertiesService.getScriptProperties().getProperty('SERVICE_ACCOUNT_EMAIL');
 const SERVICE_ACCOUNT_PRIVATE_KEY = PropertiesService.getScriptProperties().getProperty('SERVICE_ACCOUNT_PRIVATE_KEY').replace(/\\n/g, '\n');
