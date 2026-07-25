@@ -71,7 +71,7 @@ function callHomeGraphApi(endpoint, method, payload) {
   try {
     token = getAccessToken();
   } catch (e) {
-    Logger.log("Erreur d'authentification : " + e.message);
+    console.log("Erreur d'authentification : " + e.message);
     return null;
   }
 
@@ -91,12 +91,12 @@ function callHomeGraphApi(endpoint, method, payload) {
 
   try {
     const response = UrlFetchApp.fetch(url, options);
-    Logger.log('--- Appel à : ' + endpoint + ' ---');
-    Logger.log('Code HTTP : ' + response.getResponseCode());
-    Logger.log('Réponse : ' + response.getContentText());
+    console.log('--- Appel à : ' + endpoint + ' ---');
+    console.log('Code HTTP : ' + response.getResponseCode());
+    console.log('Réponse : ' + response.getContentText());
     return JSON.parse(response.getContentText());
   } catch (e) {
-    Logger.log('Erreur d\'exécution : ' + e.toString());
+    console.error('Erreur d\'exécution : ' + e.toString());
     return null;
   }
 }
@@ -156,7 +156,7 @@ function getSyncDevicesIds() {
   devices.forEach(function (d) {
     if (d.id) devicesIds.push({id: d.id});
   });
-  Logger.log("Devices Ids:" + JSON.stringify(devicesIds, null, 2));
+  //console.log("Devices Ids:" + JSON.stringify(devicesIds, null, 2));
   return devicesIds;
 }
 
@@ -198,6 +198,6 @@ function generateStatesAndNotifications(devices) {
   var statesAndNotifications = {
     states: states
   };
-  Logger.log("States and Notifications: " + JSON.stringify(statesAndNotifications, null, 2));
+  console.log("States and Notifications: " + JSON.stringify(statesAndNotifications, null, 2));
   return statesAndNotifications;
 }
