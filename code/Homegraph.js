@@ -141,7 +141,8 @@ function apiReportState() {
   callHomeGraphApi('devices:reportStateAndNotification', 'post', {
     "requestId": Utilities.getUuid(),
     "agentUserId": AGENT_USER_ID,
-    "payload": generateReportStatePayload(devices));
+    "payload": generateReportStatePayload(devices)
+  });
 }
 
 function apiSync() {
