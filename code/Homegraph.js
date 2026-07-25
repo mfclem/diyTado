@@ -156,7 +156,7 @@ function apiQuery() {
     agentUserId: AGENT_USER_ID,
     inputs: [{
       payload: {
-        devices: getSyncDevicesIds();
+        devices: getSyncDevicesIds()
       }
     }]
   });
