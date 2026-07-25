@@ -4,8 +4,6 @@
 const SERVICE_ACCOUNT_EMAIL = PropertiesService.getScriptProperties().getProperty('SERVICE_ACCOUNT_EMAIL');
 const PRIVATE_KEY = PropertiesService.getScriptProperties().getProperty('SERVICE_ACCOUNT_PRIVATE_KEY').replace(/\\n/g, '\n');
 const AGENT_USER_ID = PropertiesService.getScriptProperties().getProperty('GH_AGENT_USER_ID');
-const HOME_ID = PropertiesService.getScriptProperties().getProperty('GH_HOME_ID');
-
 
 /**
  * Génère un jeton d'accès OAuth2 (Access Token) sans aucune bibliothèque externe.
@@ -163,9 +161,10 @@ function getSyncDevicesIds() {
 }
 
 function generateStatesAndNotifications(devices) {
+  var homeId = requireHomeId_();
   var tado = tadoClient_();
   // One rooms call, indexed by room id, reused for every requested device.
-  var roomsById = indexRoomsById_(tado.getRooms(HOME_ID) || []);
+  var roomsById = indexRoomsById_(tado.getRooms(homeId) || []);
   var states = {};
   devices.forEach(function (d) {
     var parsed = parseDeviceId_(d.id);
