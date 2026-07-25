@@ -403,8 +403,6 @@ function onSync_() {
   devices.push(switchDevice_('boost',  homeId, 'Boost Heating'));
   devices.push(switchDevice_('resume', homeId, 'Resume Schedule'));
 
-  props.setProperty('GH_DEVICES', JSON.stringify(devices));
-  
   return {
     agentUserId: props.getProperty(GH.AGENT_USER_ID) || ('tado-' + homeId),
     devices: devices
