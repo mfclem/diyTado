@@ -198,6 +198,6 @@ function generateStatesAndNotifications(devices) {
   var statesAndNotifications = {
     states: states
   };
-  Logger.log("States and Notifications: " + JSON.stringify(statesAndNotifications, nill, 2));
+  Logger.log("States and Notifications: " + JSON.stringify(statesAndNotifications, null, 2));
   return statesAndNotifications;
 }
