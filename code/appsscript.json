@@ -1,7 +1,14 @@
 {
   "timeZone": "Europe/Paris",
   "dependencies": {
-    "enabledAdvancedServices": []
+    "enabledAdvancedServices": [],
+    "libraries": [
+      {
+        "userSymbol": "BetterLog",
+        "version": "27",
+        "libraryId": "1DSyxam1ceq72bMHsE6aOVeOl94X78WCwiYPytKi7chlg4x5GqiNXSw0l"
+      }
+    ]
   },
   "oauthScopes": [
     "https://www.googleapis.com/auth/script.external_request"
