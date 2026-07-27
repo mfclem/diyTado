@@ -12,6 +12,7 @@ function getThermostatsStates() {
 function run() {
   //authorizeTado();
   Logger = BetterLog.useSpreadsheet();
+  
   Logger.log("approved!");
   Logger.log("read rooms...");
   readRooms();
