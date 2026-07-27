@@ -1,10 +1,9 @@
-
 function getThermostatsStates() {
   GenAIApp.setGeminiAPIKey(PropertiesService.getScriptProperties().getProperty('GEMINI_API_KEY'));
-
+  
   const chat = GenAIApp.newChat();
   chat.addMessage('Quels sont les états des thermostats?');
-
+  
   const response = chat.run({ model: 'gemini-3.1-flash-lite' });
   Logger.log(response);
 }
@@ -12,15 +11,16 @@ function getThermostatsStates() {
 
 function run() {
   //authorizeTado();
-  console.log("approved!");
-  console.log("read rooms...");
+  Logger = BetterLog.useSpreadsheet();
+  Logger.log("approved!");
+  Logger.log("read rooms...");
   readRooms();
-  console.log("get weather...");
+  Logger.log("get weather...");
   readWeather();
-  console.log("properties:");
+  Logger.log("properties:");
   logUserProperties();
-  console.log("done");
-
+  Logger.log("done");
+  
 }
 
 
@@ -28,10 +28,10 @@ function authorizeTado() {
   var t = Tado.create();
   var res = t.startDeviceAuthorization();
   Logger.log('Open and log in: ' + res.verification_uri_complete);
-  t.pollForToken(res);   // blocks until you approve, then stores tokens
+  t.pollForToken(res); // blocks until you approve, then stores tokens
 }
 
- 
+
 function readRooms() {
   var t = Tado.create();
   var homeId = t.getMe().homes[0].id;
@@ -47,12 +47,12 @@ function readWeather() {
 function logUserProperties() {
   var userProperties = PropertiesService.getUserProperties();
   var allProperties = userProperties.getProperties();
-/*
-  if (Object.keys(allProperties).length === 0) {
-    Logger.log("Le PropertiesService est complètement vide.");
-    return;
-  }
-*/
+  /*
+    if (Object.keys(allProperties).length === 0) {
+      Logger.log("Le PropertiesService est complètement vide.");
+      return;
+    }
+  */
   for (var key in allProperties) {
     Logger.log('Key : "' + key + '" | Value : "' + allProperties[key] + '"');
   }
