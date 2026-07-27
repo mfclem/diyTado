@@ -1,6 +1,7 @@
 /*************************************************************************
 * Globals
 *********/
+
 var sheet_; //the spreadsheet that is appended to
 var SHEET_MAX_ROWS = 50000; //sheet is cleared and starts again
 var SHEET_LOG_CELL_WIDTH = 1000; //
