@@ -198,7 +198,6 @@ function doGet(e) {
  * the ?k= URL secret.
  */
 function doPost(e) {
-  Logger = BetterLog.useSpreadsheet('1SoATMEhFWrdvawUuJr9K64U_L5fCpkNYa-zt1Ay5_4Q');
   var p = e && e.parameter ? e.parameter : {};
   if (!validUrlKey_(p)) {
     return jsonOut_({ error: 'forbidden' });
