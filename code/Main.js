@@ -25,15 +25,6 @@ function run() {
   
 }
 
-
-function authorizeTado() {
-  var t = Tado.create();
-  var res = t.startDeviceAuthorization();
-  Logger.log('Open and log in: ' + res.verification_uri_complete);
-  t.pollForToken(res); // blocks until you approve, then stores tokens
-}
-
-
 function readRooms() {
   var t = Tado.create();
   var homeId = t.getMe().homes[0].id;
