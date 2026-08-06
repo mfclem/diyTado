@@ -386,9 +386,9 @@ function onSync_() {
       type: 'action.devices.types.THERMOSTAT',
       traits: ['action.devices.traits.TemperatureSetting'],
       name: { name: roomName, defaultNames: ['tado ' + roomName], nicknames: [roomName] },
-      willReportState: false,
+      willReportState: true,
       attributes: {
-        availableThermostatModes: ['off', 'heat', 'cool', 'heatcool', 'auto', 'fan-only', 'purifier', 'dry', 'eco'],
+        availableThermostatModes: ['off', 'heat'],
         thermostatTemperatureUnit: 'C'
       },
       deviceInfo: { manufacturer: 'tado', model: 'tado-X-room' },
@@ -470,16 +470,16 @@ function onQuery_(payload) {
 }
 
 /** Map a tado°X room object to a Google TemperatureSetting state block. */
-function roomToQueryState_(room, onExec = false) {
+function roomToQueryState_(room) {
   var sensor  = room.sensorDataPoints || {};
   var setting = room.setting || {};
   var isOn    = setting.power === 'ON';
   
-  var state = onExec ? {} : {
+  var state = {
     online: true,
-    status: 'SUCCESS'
+    status: 'SUCCESS',
+    thermostatMode: isOn ? 'heat' : 'off'
   };
-  state.thermostatMode = isOn ? 'heat' : 'off';
   if (sensor.insideTemperature && typeof sensor.insideTemperature.value === 'number') {
     state.thermostatTemperatureAmbient = sensor.insideTemperature.value;
   }
@@ -558,9 +558,6 @@ function runExecution_(tado, homeId, parsed, exec) {
       // We can't set a temperature without a target, so re-apply the current
       // scheduled setting by reading the room back.
       var room = indexRoomsById_(tado.getRooms(homeId) || [])[parsed.roomId] || {};
-      if (mode === 'eco' && room) {
-        return roomToQueryState_(room, true);
-      }
       var target = (room.setting && room.setting.temperature && room.setting.temperature.value) || 21;
       tado.setRoomTemperature(homeId, parsed.roomId, target, { type: 'MANUAL' });
       return { thermostatMode: 'heat', thermostatTemperatureSetpoint: target };
@@ -595,7 +592,9 @@ function runExecution_(tado, homeId, parsed, exec) {
 function onDisconnect_() {
   // Per Google's contract, revoke linking and return an empty object.
   // We rotate the link token so the old grant no longer authenticates.
+
   Logger.log("onDisconnect");
+  
   PropertiesService.getScriptProperties().setProperty(GH.LINK_TOKEN, randomToken_(32));
   return {};
 }
