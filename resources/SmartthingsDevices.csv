@@ -1,0 +1,5 @@
+Device Label,Device ID,Location,Hub,Room,Type,Exec,Battery,Status,Last Updated
+"Clim Auto","380046a0-9eb3-446f-8923-1db58f6df6d1","Domicile",,,"VIRTUAL","Cloud",,"ONLINE","2026-08-20T17:10:36.161Z"
+"Clim Boost","b6673b7f-c056-4280-84e6-6cffb2def6ac","Domicile",,,"VIRTUAL","Cloud",,"ONLINE","2026-08-20T17:10:36.160Z"
+"Clim Jour","e7597252-3c91-445c-9bd1-b5e5f98fbca8","Domicile",,,"VIRTUAL","Cloud",,"ONLINE","2026-08-20T17:10:36.160Z"
+"Clim Nuit","d20f952a-6b8d-4277-b28d-f62f22dfea6d","Domicile",,,"VIRTUAL","Cloud",,"ONLINE","2026-08-20T17:10:36.160Z"
