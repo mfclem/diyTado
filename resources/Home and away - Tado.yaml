@@ -1,0 +1,22 @@
+metadata:
+  name: Home and away - Tado
+  description: Turn on Set Home when I come home and turn on Set Away when I'm not at home.
+automations:
+  - starters:
+      - type: home.state.HomePresence
+        state: HomePresenceMode
+        is: HOME
+    actions:
+      - type: device.command.OnOff
+        devices:
+          - Set Home - Chauffage
+        on: true
+  - starters:
+      - type: home.state.HomePresence
+        state: HomePresenceMode
+        is: AWAY
+    actions:
+      - type: device.command.OnOff
+        devices:
+          - Set Away - Chauffage
+        on: true
