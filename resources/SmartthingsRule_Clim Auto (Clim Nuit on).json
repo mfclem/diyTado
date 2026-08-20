@@ -1,0 +1,89 @@
+[
+  {
+    "if": {
+      "and": [
+        {
+          "between": {
+            "value": {
+              "time": {
+                "reference": "Now"
+              }
+            },
+            "start": {
+              "time": {
+                "reference": "Sunset",
+                "offset": {
+                  "value": {
+                    "integer": 120
+                  },
+                  "unit": "Minute"
+                }
+              }
+            },
+            "end": {
+              "time": {
+                "reference": "Sunrise",
+                "offset": {
+                  "value": {
+                    "integer": 120
+                  },
+                  "unit": "Minute"
+                }
+              }
+            }
+          }
+        },
+        {
+          "equals": {
+            "left": {
+              "device": {
+                "devices": [
+                  "380046a0-9eb3-446f-8923-1db58f6df6d1"
+                ],
+                "component": "main",
+                "capability": "switch",
+                "attribute": "switch"
+              }
+            },
+            "right": {
+              "string": "on"
+            }
+          }
+        },
+        {
+          "equals": {
+            "left": {
+              "device": {
+                "devices": [
+                  "d20f952a-6b8d-4277-b28d-f62f22dfea6d"
+                ],
+                "component": "main",
+                "capability": "switch",
+                "attribute": "switch"
+              }
+            },
+            "right": {
+              "string": "off"
+            }
+          }
+        }
+      ],
+      "then": [
+        {
+          "command": {
+            "devices": [
+              "d20f952a-6b8d-4277-b28d-f62f22dfea6d"
+            ],
+            "commands": [
+              {
+                "component": "main",
+                "capability": "switch",
+                "command": "on"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  }
+]
