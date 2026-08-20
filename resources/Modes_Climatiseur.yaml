@@ -1,0 +1,267 @@
+metadata:
+  name: Modes Climatiseur
+  description: Modes Jour et Nuit pour le Climatiseur avec activation/désactivation Automatique selon l'horaire, la température et le mode Boost
+
+# Le Climatiseur est configuré via Smart Life (commandes IR)
+# Les interrupteurs Auto, Jour, Nuit et Boost sont créés et gérés via Smartthings avec les règles pré-établies suivantes:
+# - Si Jour on, Alors mettre Nuit off
+# - Si Nuit on, Alors mettre Jour off
+# - De jour, Si Auto on et Jour off, Alors mettre Jour on
+# - De nuit, Si Auto on et Nuit off, alors mettre Nuit on
+# - Si Boost on et Auto off et Jour off et Nuit off, Alors mettre Boost off
+
+automations:
+  # ---------------------------------------------------------- #
+  # ------------- Modes JOUR (Climatiseur on/off) ------------ #
+  # ---------------------------------------------------------- #
+  - name: Mode Jour (Climatiseur on)
+    starters:
+      - type: device.state.OnOff
+        device: Jour - Climatisation
+        state: on
+        is: true
+      - type: device.state.OnOff
+        device: Boost - Climatisation
+        state: on
+        is: false
+      - type: device.state.TemperatureSetting
+        device: Séjour - Séjour
+        state: thermostatTemperatureAmbient
+        greaterThanOrEqualTo: 25C
+    condition:
+      type: and
+      conditions:
+        - type: device.state.OnOff
+          device: Jour - Climatisation
+          state: on
+          is: true
+        - type: device.state.OnOff
+          device: Boost - Climatisation
+          state: on
+          is: false
+        - type: device.state.TemperatureSetting
+          device: Séjour - Séjour
+          state: thermostatTemperatureAmbient
+          greaterThanOrEqualTo: 22C
+    actions:
+      - type: device.command.ThermostatTemperatureSetpoint
+        devices: Climatiseur - Séjour
+        thermostatTemperatureSetpoint: 25C
+      - type: device.command.SetFanSpeed
+        devices: Climatiseur - Séjour
+        fanSpeed: mid
+
+  - name: Mode Jour Boost (Climatiseur on)
+    starters:
+      - type: device.state.OnOff
+        device: Jour - Climatisation
+        state: on
+        is: true
+      - type: device.state.OnOff
+        device: Boost - Climatisation
+        state: on
+        is: true
+      - type: device.state.TemperatureSetting
+        device: Séjour - Séjour
+        state: thermostatTemperatureAmbient
+        greaterThanOrEqualTo: 23C
+    condition:
+      type: and
+      conditions:
+        - type: device.state.OnOff
+          device: Jour - Climatisation
+          state: on
+          is: true
+        - type: device.state.OnOff
+          device: Boost - Climatisation
+          state: on
+          is: true
+        - type: device.state.TemperatureSetting
+          device: Séjour - Séjour
+          state: thermostatTemperatureAmbient
+          greaterThanOrEqualTo: 21C
+    actions:
+      - type: device.command.ThermostatTemperatureSetpoint
+        devices: Climatiseur - Séjour
+        thermostatTemperatureSetpoint: 23C
+      - type: device.command.SetFanSpeed
+        devices: Climatiseur - Séjour
+        fanSpeed: mid
+
+  - name: Mode Jour (Climatiseur off)
+    starters:
+      - type: device.state.OnOff
+        device: Jour - Climatisation
+        state: on
+        is: true
+      - type: device.state.TemperatureSetting
+        device: Séjour - Séjour
+        state: thermostatTemperatureAmbient
+        lessThan: 21C
+    condition:
+      type: and
+      conditions:
+        - type: device.state.OnOff
+          device: Jour - Climatisation
+          state: on
+          is: true
+        - type: device.state.TemperatureSetting
+          device: Séjour - Séjour
+          state: thermostatTemperatureAmbient
+          lessThan: 21C
+    actions:
+      ## - type: device.command.OnOff
+      ##   devices: Climatiseur - Séjour
+      ##   on: false
+      # Scène Climatiseur dans Smart Life pour palier au blocage de la commande OnOff depuis automatisation GH
+      - type: device.command.ActivateScene
+        devices: Climatiseur off
+        activate: true
+
+  # ---------------------------------------------------------- #
+  # ------------- Modes NUIT (Climatiseur on/off) ------------ #
+  # ---------------------------------------------------------- #
+  - name: Mode Nuit (Climatiseur on)
+    starters:
+      - type: device.state.OnOff
+        device: Nuit - Climatisation
+        state: on
+        is: true
+      - type: device.state.OnOff
+        device: Boost - Climatisation
+        state: on
+        is: false
+      - type: device.state.TemperatureSetting
+        device: Chambre - Chambre
+        state: thermostatTemperatureAmbient
+        greaterThan: 25C
+    condition:
+      type: and
+      conditions:
+        - type: device.state.OnOff
+          device: Nuit - Climatisation
+          state: on
+          is: true
+        - type: device.state.OnOff
+          device: Boost - Climatisation
+          state: on
+          is: false
+        - type: device.state.TemperatureSetting
+          device: Chambre - Chambre
+          state: thermostatTemperatureAmbient
+          greaterThan: 25C
+    actions:
+      - type: device.command.ThermostatTemperatureSetpoint
+        devices: Climatiseur - Séjour
+        thermostatTemperatureSetpoint: 23C
+      - type: device.command.SetFanSpeed
+        devices: Climatiseur - Séjour
+        fanSpeed: auto
+
+  - name: Mode Nuit Boost (Climatiseur on)
+    starters:
+      - type: device.state.OnOff
+        device: Nuit - Climatisation
+        state: on
+        is: true
+      - type: device.state.OnOff
+        device: Boost - Climatisation
+        state: on
+        is: true
+      - type: device.state.TemperatureSetting
+        device: Chambre - Chambre
+        state: thermostatTemperatureAmbient
+        greaterThan: 23C
+    condition:
+      type: and
+      conditions:
+        - type: device.state.OnOff
+          device: Nuit - Climatisation
+          state: on
+          is: true
+        - type: device.state.OnOff
+          device: Boost - Climatisation
+          state: on
+          is: true
+        - type: device.state.TemperatureSetting
+          device: Chambre - Chambre
+          state: thermostatTemperatureAmbient
+          greaterThan: 23C
+    actions:
+      - type: device.command.ThermostatTemperatureSetpoint
+        devices: Climatiseur - Séjour
+        thermostatTemperatureSetpoint: 20C
+      - type: device.command.SetFanSpeed
+        devices: Climatiseur - Séjour
+        fanSpeed: high
+
+  - name: Mode Nuit (Climatiseur off)
+    starters:
+      - type: device.state.OnOff
+        device: Nuit - Climatisation
+        state: on
+        is: true
+      - type: device.state.TemperatureSetting
+        device: Chambre - Chambre
+        state: thermostatTemperatureAmbient
+        lessThanOrEqualTo: 23C
+    condition:
+      type: and
+      conditions:
+        - type: device.state.OnOff
+          device: Nuit - Climatisation
+          state: on
+          is: true
+        - type: device.state.TemperatureSetting
+          device: Chambre - Chambre
+          state: thermostatTemperatureAmbient
+          lessThanOrEqualTo: 23C
+    actions:
+      ## - type: device.command.OnOff
+      ##   devices: Climatiseur - Séjour
+      ##   on: false
+      # Scène Climatiseur dans Smart Life pour palier au blocage de la commande OnOff depuis automatisation GH
+      - type: device.command.ActivateScene
+        devices: Climatiseur off
+        activate: true
+
+  # ---------------------------------------------------------- #
+  # --------------- Modes OFF (Climatiseur off) -------------- #
+  # ---------------------------------------------------------- #
+  - name: Modes off (Climatiseur off)
+    starters:
+      - type: device.state.OnOff
+        device: Auto - Climatisation
+        state: on
+        is: false
+      - type: device.state.OnOff
+        device: Jour - Climatisation
+        state: on
+        is: false
+      - type: device.state.OnOff
+        device: Nuit - Climatisation
+        state: on
+        is: false
+    condition:
+      type: and
+      conditions:
+        - type: device.state.OnOff
+          device: Auto - Climatisation
+          state: on
+          is: false
+        - type: device.state.OnOff
+          device: Jour - Climatisation
+          state: on
+          is: false
+        - type: device.state.OnOff
+          device: Nuit - Climatisation
+          state: on
+          is: false
+    actions:
+      ## - type: device.command.OnOff
+      ##   devices: Climatiseur - Séjour
+      ##   on: false
+      # Scène Climatiseur dans Smart Life pour palier au blocage de la commande OnOff depuis automatisation GH
+      - type: device.command.ActivateScene
+        devices: Climatiseur off
+        activate: true
