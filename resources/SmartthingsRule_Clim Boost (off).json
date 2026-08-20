@@ -1,0 +1,92 @@
+[
+  {
+    "if": {
+      "and": [
+        {
+          "equals": {
+            "left": {
+              "device": {
+                "devices": [
+                  "b6673b7f-c056-4280-84e6-6cffb2def6ac"
+                ],
+                "component": "main",
+                "capability": "switch",
+                "attribute": "switch"
+              }
+            },
+            "right": {
+              "string": "on"
+            }
+          }
+        },
+        {
+          "equals": {
+            "left": {
+              "device": {
+                "devices": [
+                  "380046a0-9eb3-446f-8923-1db58f6df6d1"
+                ],
+                "component": "main",
+                "capability": "switch",
+                "attribute": "switch"
+              }
+            },
+            "right": {
+              "string": "off"
+            }
+          }
+        },
+        {
+          "equals": {
+            "left": {
+              "device": {
+                "devices": [
+                  "e7597252-3c91-445c-9bd1-b5e5f98fbca8"
+                ],
+                "component": "main",
+                "capability": "switch",
+                "attribute": "switch"
+              }
+            },
+            "right": {
+              "string": "off"
+            }
+          }
+        },
+        {
+          "equals": {
+            "left": {
+              "device": {
+                "devices": [
+                  "d20f952a-6b8d-4277-b28d-f62f22dfea6d"
+                ],
+                "component": "main",
+                "capability": "switch",
+                "attribute": "switch"
+              }
+            },
+            "right": {
+              "string": "off"
+            }
+          }
+        }
+      ],
+      "then": [
+        {
+          "command": {
+            "devices": [
+              "b6673b7f-c056-4280-84e6-6cffb2def6ac"
+            ],
+            "commands": [
+              {
+                "component": "main",
+                "capability": "switch",
+                "command": "off"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  }
+]
