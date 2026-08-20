@@ -1,0 +1,37 @@
+[
+  {
+    "if": {
+      "equals": {
+        "left": {
+          "device": {
+            "devices": [
+              "e7597252-3c91-445c-9bd1-b5e5f98fbca8"
+            ],
+            "component": "main",
+            "capability": "switch",
+            "attribute": "switch"
+          }
+        },
+        "right": {
+          "string": "on"
+        }
+      },
+      "then": [
+        {
+          "command": {
+            "devices": [
+              "d20f952a-6b8d-4277-b28d-f62f22dfea6d"
+            ],
+            "commands": [
+              {
+                "component": "main",
+                "capability": "switch",
+                "command": "off"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  }
+]
