@@ -182,6 +182,7 @@ function setupGoogleHomeAction() {
  * straight back to Google with a one-shot auth code.
  */
 function doGet(e) {
+  // Logger = BetterLog.useSpreadsheet(PropertiesService.getScriptProperties().getProperty('SPREADSHEET'));
   var p = e && e.parameter ? e.parameter : {};
   if (p.p === 'auth') {
     if (!validUrlKey_(p)) return htmlOut_('forbidden');
@@ -196,6 +197,7 @@ function doGet(e) {
  * the ?k= URL secret.
  */
 function doPost(e) {
+  // Logger = BetterLog.useSpreadsheet(PropertiesService.getScriptProperties().getProperty('SPREADSHEET'));
   var p = e && e.parameter ? e.parameter : {};
   if (!validUrlKey_(p)) {
     return jsonOut_({ error: 'forbidden' });
@@ -372,7 +374,7 @@ function onSync_() {
 
   var devices = [];
 
-  console.log("onSync");
+  //Logger.log("onSync");
 
   rooms.forEach(function (room) {
     var roomName = room.name || ('Room ' + room.id);
@@ -499,7 +501,7 @@ function onQuery_(payload) {
   var wanted = (payload && payload.devices) || [];
   var tado   = tadoClient_();
 
-  console.log("onQuery");
+  //Logger.log("onQuery");
 
   // Rooms are cached for 60 s — QUERY is called frequently and getRooms() is
   // the most expensive call on the critical fulfillment path.
@@ -601,7 +603,7 @@ function onExecute_(payload) {
   var tado    = tadoClient_();
   var commands = (payload && payload.commands) || [];
 
-  console.log("onExecute");
+  //Logger.log("onExecute");
   
   // Accumulate results keyed by a status → ids grouping (Google's format).
   var results = [];
@@ -702,7 +704,7 @@ function onDisconnect_() {
   // Per Google's contract, revoke linking and return an empty object.
   // We rotate the link token so the old grant no longer authenticates.
 
-  console.log("onDisconnect");
+  //Logger.log("onDisconnect");
   
   PropertiesService.getScriptProperties().setProperty(GH.LINK_TOKEN, randomToken_(32));
   return {};
