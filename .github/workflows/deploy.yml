@@ -4,7 +4,7 @@ on:
   push:
     branches:
       - main  # Ou 'master', selon le nom de votre branche principale
-  workflow_dispatch:
+  workflow_dispatch: # 👈 C'est ce qui crée le bouton "Lancer manuellement"
 
 jobs:
   deploy:
