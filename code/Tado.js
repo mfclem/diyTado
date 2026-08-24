@@ -318,6 +318,30 @@ var Tado = (function () {
     return this.request(v2Url_('/homes/' + enc_(homeId) + '/weather'));
   };
 
+  /**
+   * GET /homes/{homeId}/airComfort — per-room air comfort indicators.
+   *
+   * Returns:
+   *   {
+   *     freshness: {
+   *       value: 'FAIR',          // overall home freshness
+   *       lastOpenWindow: string  // ISO-8601 datetime of last open-window event
+   *     },
+   *     comfort: [
+   *       {
+   *         roomId: number,
+   *         temperatureLevel: 'COLD' | 'COMFY' | 'HOT',
+   *         humidityLevel:    'DRY'  | 'COMFY' | 'HUMID',
+   *         coordinate: { radial: number, angular: number }
+   *       },
+   *       ...
+   *     ]
+   *   }
+   */
+  TadoClient.prototype.getAirComfort = function (homeId) {
+    return this.request(v2Url_('/homes/' + enc_(homeId) + '/airComfort'));
+  };
+
   /** GET /homes/{homeId}/devices */
   TadoClient.prototype.getDevices = function (homeId) {
     return this.request(v2Url_('/homes/' + enc_(homeId) + '/devices'));

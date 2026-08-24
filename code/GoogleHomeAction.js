@@ -399,10 +399,12 @@ function onSync_() {
   // Whole-home actions modeled as SWITCH (OnOff) devices. Unlike SCENE devices,
   // switches reliably show as tiles, appear in the automation action picker,
   // and respond to voice in the current Google Home app.
-  devices.push(switchDevice_('home',   homeId, 'Set Home'));
-  devices.push(switchDevice_('away',   homeId, 'Set Away'));
-  devices.push(switchDevice_('boost',  homeId, 'Boost Heating'));
-  devices.push(switchDevice_('resume', homeId, 'Resume Schedule'));
+  // home/away are stateful (reflect real presence) → willReportState: true.
+  // boost/resume are momentary (no persistent state) → willReportState: false.
+  devices.push(switchDevice_('home',   homeId, 'Set Home',         true));
+  devices.push(switchDevice_('away',   homeId, 'Set Away',         true));
+  devices.push(switchDevice_('boost',  homeId, 'Boost Heating',    false));
+  devices.push(switchDevice_('resume', homeId, 'Resume Schedule',  false));
 
   return {
     agentUserId: props.getProperty(GH.AGENT_USER_ID) || ('tado-' + homeId),
@@ -410,13 +412,13 @@ function onSync_() {
   };
 }
 
-function switchDevice_(kind, homeId, name) {
+function switchDevice_(kind, homeId, name, willReportState) {
   return {
     id:   deviceId_(kind, homeId),
     type: 'action.devices.types.SWITCH',
     traits: ['action.devices.traits.OnOff'],
     name: { name: name, defaultNames: ['tado ' + name], nicknames: [name] },
-    willReportState: false,
+    willReportState: !!willReportState,
     attributes: {},
     deviceInfo: { manufacturer: 'tado', model: 'tado-X-action' }
   };

@@ -1,4 +1,80 @@
 /**
+ * HomeGraph.js — Proactive state reporting to Google Home via the HomeGraph API
+ * ==============================================================================
+ *
+ * PURPOSE
+ * -------
+ * Google Home polls device state via the QUERY fulfillment intent. This module
+ * adds *proactive* push reporting: it calls the HomeGraph API directly so that
+ * the Google Home app reflects the real tado° state immediately, without waiting
+ * for the next poll.
+ *
+ * The two entry points you typically call (e.g. from a time-based trigger):
+ *   • apiReportStateAndNotification() — push current state for ALL devices.
+ *   • apiRequestSync()               — ask Google to re-run SYNC (use after
+ *                                      rooms are added/removed in tado°).
+ *
+ * DEVICES THAT REPORT STATE
+ * -------------------------
+ * Only devices whose SYNC descriptor carries willReportState:true participate
+ * in proactive reporting; the rest are polled on demand.
+ *
+ *   • THERMOSTAT rooms  (willReportState: true)
+ *       Reports: thermostatMode, thermostatTemperatureAmbient,
+ *                thermostatTemperatureSetpoint, thermostatHumidityAmbient.
+ *
+ *   • "Set Home" switch  (willReportState: true)
+ *       Reports: on = (current tado° presence === 'HOME').
+ *
+ *   • "Set Away" switch  (willReportState: true)
+ *       Reports: on = (current tado° presence === 'AWAY').
+ *
+ *   • "Boost Heating" / "Resume Schedule" switches  (willReportState: false)
+ *       Momentary actions — they have no persistent state to report, so they
+ *       are always read back as OFF and are excluded from proactive reporting.
+ *
+ * PREREQUISITES — Script Properties (set via Project Settings → Properties)
+ * --------------------------------------------------------------------------
+ * The following Script Properties must be present before any function in this
+ * file can run:
+ *
+ *   SERVICE_ACCOUNT_EMAIL
+ *       The e-mail address of a GCP Service Account that has been granted the
+ *       "Service Account Token Creator" role and the HomeGraph API scope
+ *       (https://www.googleapis.com/auth/homegraph).
+ *       Example: my-sa@my-project.iam.gserviceaccount.com
+ *
+ *   SERVICE_ACCOUNT_PRIVATE_KEY
+ *       The RSA private key from the Service Account JSON key file.
+ *       Paste the full "-----BEGIN PRIVATE KEY-----…-----END PRIVATE KEY-----"
+ *       block, with literal \n for newlines (Apps Script stores it as one line).
+ *       The code replaces \n → real newlines before use.
+ *
+ *   GH_AGENT_USER_ID  (written by setupGoogleHomeAction() in GoogleHomeAction.js)
+ *       The opaque string that identifies this user to the HomeGraph API. It must
+ *       match the agentUserId used in the SYNC response.
+ *
+ *   GH_HOME_ID  (written by setupGoogleHomeAction() in GoogleHomeAction.js)
+ *       The tado° home ID, used to fetch live room and presence state.
+ *
+ *   TADO_TOKENS  (written by authorizeTado() in GoogleHomeAction.js)
+ *       The tado° OAuth token bundle. Required so tadoClient_() can call the
+ *       tado° API without interactive authorization.
+ *
+ * SETUP CHECKLIST
+ * ---------------
+ * 1. Enable the HomeGraph API in your GCP project.
+ * 2. Create a Service Account, download a JSON key, and copy the e-mail and
+ *    private key into the Script Properties above.
+ * 3. Grant the Service Account the "homegraph.devices.reportStateAndNotification"
+ *    permission (or the predefined "Home Graph Service Agent" role).
+ * 4. Optionally (if not yet available) run setupGoogleHomeAction() and authorizeTado() in GoogleHomeAction.js
+ *    so that GH_AGENT_USER_ID, GH_HOME_ID, and TADO_TOKENS are populated.
+ * 5. Create a time-based trigger on apiReportStateAndNotification()
+ *    (e.g. every 5 minutes) so Google Home stays in sync automatically.
+ */
+
+/**
  * PARAMÈTRES DU COMPTE DE SERVICE
  */
 const SERVICE_ACCOUNT_EMAIL = PropertiesService.getScriptProperties().getProperty('SERVICE_ACCOUNT_EMAIL');
@@ -165,16 +241,32 @@ function generateStatesAndNotifications(devices) {
   var tado = tadoClient_();
   // One rooms call, indexed by room id, reused for every requested device.
   var roomsById = indexRoomsById_(tado.getRooms(homeId) || []);
+
+  // Presence is fetched lazily once — only if at least one home/away switch is
+  // in the device list.
+  var presence = null, presenceFetched = false;
+  function currentPresence_() {
+    if (!presenceFetched) {
+      presenceFetched = true;
+      try {
+        var st = tado.getHomeState(homeId);
+        presence = st && st.presence;  // 'HOME' | 'AWAY'
+      } catch (e) { presence = null; }
+    }
+    return presence;
+  }
+
   var states = {};
   devices.forEach(function (d) {
     var parsed = parseDeviceId_(d.id);
+
     if (parsed.kind === 'room') {
       var room = roomsById[parsed.roomId];
       if (room) {
         var sensor  = room.sensorDataPoints || {};
         var setting = room.setting || {};
         var isOn    = setting.power === 'ON';
-  
+
         var state = {
           online: true,
           thermostatMode: (isOn ? 'heat' : 'off')
@@ -193,8 +285,19 @@ function generateStatesAndNotifications(devices) {
         }
         states[d.id] = state;
       }
+
+    } else if (parsed.kind === 'home' || parsed.kind === 'away') {
+      // Stateful presence switches — reflect the real tado° HOME/AWAY value.
+      var p = currentPresence_();
+      states[d.id] = {
+        online: true,
+        on: parsed.kind === 'home' ? (p === 'HOME') : (p === 'AWAY')
+      };
+
     }
+    // boost / resume are momentary (willReportState: false) — excluded.
   });
+
   var statesAndNotifications = {
     states: states
   };
