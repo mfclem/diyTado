@@ -158,7 +158,7 @@ The script ID is in `.clasp.json`; source files live in `code/`.
 
 | Workflow | Trigger | What it does |
 |---|---|---|
-| `deploy.yml` | Push to `main` | Runs `clasp push` to deploy to Apps Script |
+| `deploy.yml` | Push to `main` / Manual | Runs `clasp push` to deploy to Apps Script |
 | `pull.yml` | Manual | Runs `clasp pull` to sync from Apps Script |
 
 ### Test functions
