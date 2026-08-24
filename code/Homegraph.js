@@ -20,18 +20,25 @@
  * in proactive reporting; the rest are polled on demand.
  *
  *   • THERMOSTAT rooms  (willReportState: true)
- *       Reports: thermostatMode, thermostatTemperatureAmbient,
- *                thermostatTemperatureSetpoint, thermostatHumidityAmbient.
+ *       Reports: thermostatMode (off/heat/auto), thermostatTemperatureAmbient,
+ *                thermostatTemperatureSetpoint, thermostatHumidityAmbient,
+ *                online (reflects room connection state).
  *
- *   • "Set Home" switch  (willReportState: true)
- *       Reports: on = (current tado° presence === 'HOME').
+ *   • "Room X — Open Window" sensors  (willReportState: true)
+ *       Reports: openPercent (0 = closed, 100 = open).
  *
- *   • "Set Away" switch  (willReportState: true)
- *       Reports: on = (current tado° presence === 'AWAY').
+ *   • "Room X — Heating" sensors  (willReportState: true)
+ *       Reports: currentSensorStateData HeatingActive = ACTIVE | INACTIVE.
  *
- *   • "Boost Heating" / "Resume Schedule" switches  (willReportState: false)
- *       Momentary actions — they have no persistent state to report, so they
- *       are always read back as OFF and are excluded from proactive reporting.
+ *   • "Room X — Humidity" sensors  (willReportState: true)
+ *       Reports: humidityAmbientPercent.
+ *
+ *   • "Set Home" / "Set Away" switches  (willReportState: true)
+ *       Reports: on = (current tado° presence === 'HOME' / 'AWAY').
+ *
+ *   • "Boost Heating" / "Resume Schedule" whole-home switches  (willReportState: false)
+ *   • "Resume Room X" per-room switches  (willReportState: false)
+ *       Momentary actions — no persistent state, excluded from proactive reporting.
  *
  * PREREQUISITES — Script Properties (set via Project Settings → Properties)
  * --------------------------------------------------------------------------
@@ -266,10 +273,13 @@ function generateStatesAndNotifications(devices) {
         var sensor  = room.sensorDataPoints || {};
         var setting = room.setting || {};
         var isOn    = setting.power === 'ON';
+        var online  = !room.connection || room.connection.state === 'CONNECTED';
+        var hasManualOverride = !!(room.manualControlTermination);
+        var mode    = isOn ? (hasManualOverride ? 'heat' : 'auto') : 'off';
 
         var state = {
-          online: true,
-          thermostatMode: (isOn ? 'heat' : 'off')
+          online: online,
+          thermostatMode: mode
         };
         if (sensor.insideTemperature && typeof sensor.insideTemperature.value === 'number') {
           state.thermostatTemperatureAmbient = sensor.insideTemperature.value;
@@ -286,6 +296,36 @@ function generateStatesAndNotifications(devices) {
         states[d.id] = state;
       }
 
+    } else if (parsed.kind === 'openwindow') {
+      var room = roomsById[parsed.roomId];
+      if (room) {
+        states[d.id] = {
+          online: true,
+          openPercent: room.openWindow ? 100 : 0
+        };
+      }
+
+    } else if (parsed.kind === 'heating') {
+      var room = roomsById[parsed.roomId];
+      if (room) {
+        var pct = room.heatingPower && typeof room.heatingPower.percentage === 'number'
+                    ? room.heatingPower.percentage : 0;
+        states[d.id] = {
+          online: true,
+          currentSensorStateData: [{ name: 'HeatingActive', currentSensorState: pct > 0 ? 'ACTIVE' : 'INACTIVE' }]
+        };
+      }
+
+    } else if (parsed.kind === 'humidity') {
+      var room = roomsById[parsed.roomId];
+      if (room) {
+        var sensor = room.sensorDataPoints || {};
+        states[d.id] = {
+          online: true,
+          humidityAmbientPercent: sensor.humidity ? sensor.humidity.percentage : null
+        };
+      }
+
     } else if (parsed.kind === 'home' || parsed.kind === 'away') {
       // Stateful presence switches — reflect the real tado° HOME/AWAY value.
       var p = currentPresence_();
@@ -295,7 +335,7 @@ function generateStatesAndNotifications(devices) {
       };
 
     }
-    // boost / resume are momentary (willReportState: false) — excluded.
+    // resumeroom / boost / resume are momentary (willReportState: false) — excluded.
   });
 
   var statesAndNotifications = {

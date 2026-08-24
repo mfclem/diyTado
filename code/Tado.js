@@ -418,6 +418,24 @@ var Tado = (function () {
     return this.request(hopsUrl_('/homes/' + enc_(homeId) + '/rooms/' + enc_(roomId)));
   };
 
+  /**
+   * GET /homes/{homeId}/rooms/{roomId}/schedule — full weekly timetable.
+   *
+   * Returns an object with:
+   *   room:       { id, name }
+   *   otherRooms: [{ id, name }, ...]
+   *   schedule:   array of blocks, each:
+   *     { dayType: 'MONDAY'|'TUESDAY'|…|'SUNDAY',
+   *       start: 'HH:MM', end: 'HH:MM',
+   *       setting: { power: 'ON'|'OFF', temperature: { value: number } } }
+   *
+   * Pass the schedule array to Tado.getCurrentAndNextBlock() to get the
+   * active block and the next scheduled change for a given moment in time.
+   */
+  TadoClient.prototype.getRoomSchedule = function (homeId, roomId) {
+    return this.request(hopsUrl_('/homes/' + enc_(homeId) + '/rooms/' + enc_(roomId) + '/schedule'));
+  };
+
   /** GET /homes/{homeId}/features */
   TadoClient.prototype.getFeatures = function (homeId) {
     return this.request(hopsUrl_('/homes/' + enc_(homeId) + '/features'));
@@ -498,6 +516,23 @@ var Tado = (function () {
   TadoClient.prototype.resumeSchedule = function (homeId) {
     return this.request(hopsUrl_('/homes/' + enc_(homeId) + '/quickActions/resumeSchedule'), {
       method: 'post'
+    });
+  };
+
+  /**
+   * Resume the tado°X schedule for a single room by applying a
+   * NEXT_TIME_BLOCK termination to the current setting. The room reverts to
+   * its scheduled setpoint at the next block boundary.
+   *
+   * Uses the room's current setting so the temperature during the remainder
+   * of this block is unchanged — only the termination type is updated.
+   */
+  TadoClient.prototype.resumeRoomSchedule = function (homeId, roomId) {
+    var room = this.getRoom(homeId, roomId);
+    var setting = (room && room.setting) || { power: 'ON', temperature: null };
+    return this.setRoomManualControl(homeId, roomId, {
+      setting: setting,
+      termination: { type: 'NEXT_TIME_BLOCK' }
     });
   };
 
@@ -595,6 +630,69 @@ var Tado = (function () {
     hopsUrl: function (path, query) { return hopsUrl_(path, query); },
 
     // Exposed for advanced use / instanceof checks.
-    TadoClient: TadoClient
+    TadoClient: TadoClient,
+
+    /**
+     * Given the schedule array from getRoomSchedule() and a Date, return the
+     * active block and the next scheduled block.
+     *
+     * @param {Array}  schedule  The schedule array (room.schedule from getRoomSchedule()).
+     * @param {Date=}  now       The moment to evaluate against. Defaults to new Date().
+     * @return {{ current: {dayType,start,end,setting}, next: {dayType,start,setting} }}
+     *
+     * Algorithm:
+     *   1. Find the block whose dayType matches today and whose [start, end)
+     *      window contains the current time.
+     *   2. The next block is the immediately following entry for that day, or
+     *      the first block of the next day if we are in the last slot.
+     *
+     * Schedule blocks use 'HH:MM' strings and cover a full 7-day week.
+     * '24:00' is treated as the end of the day (== '00:00' the next day).
+     */
+    getCurrentAndNextBlock: function (schedule, now) {
+      if (!schedule || !schedule.length) return null;
+      now = now || new Date();
+
+      var DAY_NAMES = ['SUNDAY','MONDAY','TUESDAY','WEDNESDAY','THURSDAY','FRIDAY','SATURDAY'];
+      var todayName = DAY_NAMES[now.getDay()];
+      var currentMins = now.getHours() * 60 + now.getMinutes();
+
+      function toMins_(hhmm) {
+        var parts = hhmm.split(':');
+        var m = parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10);
+        return m === 0 && hhmm !== '00:00' ? 24 * 60 : m; // treat '24:00' as 1440
+      }
+
+      // Blocks for today, sorted by start time.
+      var todayBlocks = schedule
+        .filter(function (b) { return b.dayType === todayName; })
+        .sort(function (a, b) { return toMins_(a.start) - toMins_(b.start); });
+
+      var currentIdx = -1;
+      for (var i = 0; i < todayBlocks.length; i++) {
+        var s = toMins_(todayBlocks[i].start);
+        var e = toMins_(todayBlocks[i].end);
+        if (currentMins >= s && currentMins < e) { currentIdx = i; break; }
+      }
+
+      if (currentIdx === -1) return null;  // no matching block (shouldn't happen)
+
+      var current = todayBlocks[currentIdx];
+      var next;
+
+      if (currentIdx + 1 < todayBlocks.length) {
+        // Next block is later today.
+        next = todayBlocks[currentIdx + 1];
+      } else {
+        // Wrap to the first block of tomorrow.
+        var tomorrowName = DAY_NAMES[(now.getDay() + 1) % 7];
+        var tomorrowBlocks = schedule
+          .filter(function (b) { return b.dayType === tomorrowName; })
+          .sort(function (a, b) { return toMins_(a.start) - toMins_(b.start); });
+        next = tomorrowBlocks.length ? tomorrowBlocks[0] : null;
+      }
+
+      return { current: current, next: next };
+    }
   };
 })();

@@ -378,20 +378,92 @@ function onSync_() {
 
   Logger.log("onSync");
 
-  // One THERMOSTAT per room.
   rooms.forEach(function (room) {
     var roomName = room.name || ('Room ' + room.id);
+    var rid      = room.id;
+
+    // Thermostat — 'auto' maps to resume-schedule, 'heat' to manual hold.
     devices.push({
-      id:   deviceId_('room', homeId, room.id),
+      id:   deviceId_('room', homeId, rid),
       type: 'action.devices.types.THERMOSTAT',
       traits: ['action.devices.traits.TemperatureSetting'],
       name: { name: roomName, defaultNames: ['tado ' + roomName], nicknames: [roomName] },
       willReportState: true,
       attributes: {
-        availableThermostatModes: ['off', 'heat'],
+        availableThermostatModes: ['off', 'heat', 'auto'],
         thermostatTemperatureUnit: 'C'
       },
       deviceInfo: { manufacturer: 'tado', model: 'tado-X-room' },
+      roomHint: roomName
+    });
+
+    // Open-window sensor — OPEN / CLOSED.
+    devices.push({
+      id:   deviceId_('openwindow', homeId, rid),
+      type: 'action.devices.types.SENSOR',
+      traits: ['action.devices.traits.OpenClose'],
+      name: {
+        name: roomName + ' — Open Window',
+        defaultNames: ['tado ' + roomName + ' open window'],
+        nicknames: [roomName + ' open window']
+      },
+      willReportState: true,
+      attributes: { discreteOnlyOpenClose: true },
+      deviceInfo: { manufacturer: 'tado', model: 'tado-X-sensor' },
+      roomHint: roomName
+    });
+
+    // Heating sensor — ACTIVE / INACTIVE (binary; heatingPower > 0).
+    devices.push({
+      id:   deviceId_('heating', homeId, rid),
+      type: 'action.devices.types.SENSOR',
+      traits: ['action.devices.traits.SensorState'],
+      name: {
+        name: roomName + ' — Heating',
+        defaultNames: ['tado ' + roomName + ' heating'],
+        nicknames: [roomName + ' heating']
+      },
+      willReportState: true,
+      attributes: {
+        sensorStatesSupported: [{
+          name: 'HeatingActive',
+          descriptiveCapability: 'BINARY',
+          availableStates: ['ACTIVE', 'INACTIVE']
+        }]
+      },
+      deviceInfo: { manufacturer: 'tado', model: 'tado-X-sensor' },
+      roomHint: roomName
+    });
+
+    // Humidity sensor — numeric percentage.
+    devices.push({
+      id:   deviceId_('humidity', homeId, rid),
+      type: 'action.devices.types.SENSOR',
+      traits: ['action.devices.traits.HumiditySetting'],
+      name: {
+        name: roomName + ' — Humidity',
+        defaultNames: ['tado ' + roomName + ' humidity'],
+        nicknames: [roomName + ' humidity']
+      },
+      willReportState: true,
+      attributes: { queryOnlyHumiditySetting: true },
+      deviceInfo: { manufacturer: 'tado', model: 'tado-X-sensor' },
+      roomHint: roomName
+    });
+
+    // Per-room resume switch — momentary, turning ON resumes schedule.
+    devices.push({
+      id:   deviceId_('resumeroom', homeId, rid),
+      type: 'action.devices.types.SWITCH',
+      traits: ['action.devices.traits.OnOff'],
+      name: {
+        name: 'Resume ' + roomName,
+        defaultNames: ['tado resume ' + roomName],
+        nicknames: ['resume ' + roomName]
+      },
+      willReportState: false,
+      attributes: {},
+      deviceInfo: { manufacturer: 'tado', model: 'tado-X-action' },
       roomHint: roomName
     });
   });
@@ -456,6 +528,27 @@ function onQuery_(payload) {
     if (parsed.kind === 'room') {
       var room = roomsById[parsed.roomId];
       out[d.id] = room ? roomToQueryState_(room) : { online: false, status: 'ERROR', errorCode: 'deviceNotFound' };
+    } else if (parsed.kind === 'openwindow') {
+      var room = roomsById[parsed.roomId];
+      var isOpen = !!(room && room.openWindow);
+      out[d.id] = { online: true, status: 'SUCCESS', openPercent: isOpen ? 100 : 0 };
+    } else if (parsed.kind === 'heating') {
+      var room = roomsById[parsed.roomId];
+      var pct  = room && room.heatingPower && typeof room.heatingPower.percentage === 'number'
+                   ? room.heatingPower.percentage : 0;
+      out[d.id] = {
+        online: true,
+        status: 'SUCCESS',
+        currentSensorStateData: [{ name: 'HeatingActive', currentSensorState: pct > 0 ? 'ACTIVE' : 'INACTIVE' }]
+      };
+    } else if (parsed.kind === 'humidity') {
+      var room = roomsById[parsed.roomId];
+      var pct  = room && room.sensorDataPoints && room.sensorDataPoints.humidity
+                   ? room.sensorDataPoints.humidity.percentage : null;
+      out[d.id] = { online: true, status: 'SUCCESS', humidityAmbientPercent: pct };
+    } else if (parsed.kind === 'resumeroom') {
+      // Momentary switch — always reads back OFF.
+      out[d.id] = { online: true, status: 'SUCCESS', on: false };
     } else if (parsed.kind === 'home' || parsed.kind === 'away') {
       // Stateful presence switches: reflect the real tado° presence, mutually
       // exclusive. If presence is unknown, fall back to off.
@@ -476,11 +569,18 @@ function roomToQueryState_(room) {
   var sensor  = room.sensorDataPoints || {};
   var setting = room.setting || {};
   var isOn    = setting.power === 'ON';
-  
+  var online  = !room.connection || room.connection.state === 'CONNECTED';
+
+  // 'auto' when the schedule is running freely (no manual override active).
+  // 'heat' when a manual override is holding a temperature.
+  // 'off'  when power is OFF.
+  var hasManualOverride = !!(room.manualControlTermination);
+  var mode = isOn ? (hasManualOverride ? 'heat' : 'auto') : 'off';
+
   var state = {
-    online: true,
+    online: online,
     status: 'SUCCESS',
-    thermostatMode: isOn ? 'heat' : 'off'
+    thermostatMode: mode
   };
   if (sensor.insideTemperature && typeof sensor.insideTemperature.value === 'number') {
     state.thermostatTemperatureAmbient = sensor.insideTemperature.value;
@@ -555,16 +655,26 @@ function runExecution_(tado, homeId, parsed, exec) {
         tado.turnRoomOff(homeId, parsed.roomId, { type: 'MANUAL' });
         return { thermostatMode: 'off' };
       }
-      // 'heat' (or 'on'): resume schedule for just this room by clearing the
-      // manual overlay via NEXT_TIME_BLOCK so tado°'s schedule takes over.
-      // We can't set a temperature without a target, so re-apply the current
-      // scheduled setting by reading the room back.
+      if (mode === 'auto') {
+        // Resume schedule — hand control back to tado°'s timetable.
+        tado.resumeRoomSchedule(homeId, parsed.roomId);
+        return { thermostatMode: 'auto' };
+      }
+      // 'heat': apply the current setpoint as a manual hold.
       var room = indexRoomsById_(tado.getRooms(homeId) || [])[parsed.roomId] || {};
       var target = (room.setting && room.setting.temperature && room.setting.temperature.value) || 21;
       tado.setRoomTemperature(homeId, parsed.roomId, target, { type: 'MANUAL' });
       return { thermostatMode: 'heat', thermostatTemperatureSetpoint: target };
     }
     throw new Error('Unsupported thermostat command: ' + cmd);
+  }
+
+  // --- Per-room resume switch ---
+  if (parsed.kind === 'resumeroom') {
+    if (cmd === 'action.devices.commands.OnOff' && params.on === true) {
+      tado.resumeRoomSchedule(homeId, parsed.roomId);
+    }
+    return { on: false };  // always reads back OFF (momentary)
   }
 
   // --- Whole-home switches (OnOff) ---
@@ -604,8 +714,12 @@ function onDisconnect_() {
 // ===========================================================================
 // Device id encoding
 // ===========================================================================
-// Format:  room-<homeId>-<roomId>   for thermostats
-//          <kind>-<homeId>          for whole-home switches (home/away/boost/resume)
+// Format:  room-<homeId>-<roomId>           thermostat
+//          openwindow-<homeId>-<roomId>      open-window sensor
+//          heating-<homeId>-<roomId>         heating sensor
+//          humidity-<homeId>-<roomId>        humidity sensor
+//          resumeroom-<homeId>-<roomId>      per-room resume switch
+//          <kind>-<homeId>                   whole-home switches (home/away/boost/resume)
 
 function deviceId_(kind, homeId, roomId) {
   var id = kind + '-' + homeId;
