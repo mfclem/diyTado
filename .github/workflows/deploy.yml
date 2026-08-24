@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main  # Ou 'master', selon le nom de votre branche principale
+  workflow_dispatch:
 
 jobs:
   deploy:
