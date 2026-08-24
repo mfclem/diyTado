@@ -1,9 +1,9 @@
 function getThermostatsStates() {
   GenAIApp.setGeminiAPIKey(PropertiesService.getScriptProperties().getProperty('GEMINI_API_KEY'));
-  
+
   const chat = GenAIApp.newChat();
   chat.addMessage('Quels sont les états des thermostats?');
-  
+
   const response = chat.run({ model: 'gemini-3.1-flash-lite' });
   Logger.log(response);
 }
@@ -13,7 +13,7 @@ function run() {
   //authorizeTado();
   Logger = BetterLog.useSpreadsheet('1SoATMEhFWrdvawUuJr9K64U_L5fCpkNYa-zt1Ay5_4Q');
   Session.getActiveUser();
-  
+
   Logger.log("approved!");
   Logger.log("read rooms...");
   readRooms();
@@ -22,7 +22,7 @@ function run() {
   Logger.log("properties:");
   logUserProperties();
   Logger.log("done");
-  
+
 }
 
 function readRooms() {

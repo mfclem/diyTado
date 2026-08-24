@@ -182,10 +182,7 @@ function setupGoogleHomeAction() {
  * straight back to Google with a one-shot auth code.
  */
 function doGet(e) {
-  Logger = BetterLog.useSpreadsheet(PropertiesService.getScriptProperties().getProperty('SPREADSHEET'));
   var p = e && e.parameter ? e.parameter : {};
-  // The ?k= URL secret gates the authorize endpoint. A plain visit with no
-  // p=auth just shows a liveness message and never touches tado°.
   if (p.p === 'auth') {
     if (!validUrlKey_(p)) return htmlOut_('forbidden');
     return handleAuthorize_(p);
@@ -199,7 +196,6 @@ function doGet(e) {
  * the ?k= URL secret.
  */
 function doPost(e) {
-  Logger = BetterLog.useSpreadsheet(PropertiesService.getScriptProperties().getProperty('SPREADSHEET'));
   var p = e && e.parameter ? e.parameter : {};
   if (!validUrlKey_(p)) {
     return jsonOut_({ error: 'forbidden' });
@@ -376,7 +372,7 @@ function onSync_() {
 
   var devices = [];
 
-  Logger.log("onSync");
+  console.log("onSync");
 
   rooms.forEach(function (room) {
     var roomName = room.name || ('Room ' + room.id);
@@ -503,10 +499,11 @@ function onQuery_(payload) {
   var wanted = (payload && payload.devices) || [];
   var tado   = tadoClient_();
 
-  Logger.log("onQuery");
+  console.log("onQuery");
 
-  // One rooms call, indexed by room id, reused for every requested device.
-  var roomsById = indexRoomsById_(tado.getRooms(homeId) || []);
+  // Rooms are cached for 60 s — QUERY is called frequently and getRooms() is
+  // the most expensive call on the critical fulfillment path.
+  var roomsById = getCachedRoomsById_(tado, homeId);
 
   // Home presence is fetched lazily and only once — a QUERY that asks about
   // rooms only should not incur an extra /state call.
@@ -544,7 +541,7 @@ function onQuery_(payload) {
     } else if (parsed.kind === 'humidity') {
       var room = roomsById[parsed.roomId];
       var pct  = room && room.sensorDataPoints && room.sensorDataPoints.humidity
-                   ? room.sensorDataPoints.humidity.percentage : null;
+                   ? room.sensorDataPoints.humidity.percentage : 0;
       out[d.id] = { online: true, status: 'SUCCESS', humidityAmbientPercent: pct };
     } else if (parsed.kind === 'resumeroom') {
       // Momentary switch — always reads back OFF.
@@ -604,7 +601,7 @@ function onExecute_(payload) {
   var tado    = tadoClient_();
   var commands = (payload && payload.commands) || [];
 
-  Logger.log("onExecute");
+  console.log("onExecute");
   
   // Accumulate results keyed by a status → ids grouping (Google's format).
   var results = [];
@@ -705,7 +702,7 @@ function onDisconnect_() {
   // Per Google's contract, revoke linking and return an empty object.
   // We rotate the link token so the old grant no longer authenticates.
 
-  Logger.log("onDisconnect");
+  console.log("onDisconnect");
   
   PropertiesService.getScriptProperties().setProperty(GH.LINK_TOKEN, randomToken_(32));
   return {};
@@ -754,6 +751,23 @@ function indexRoomsById_(rooms) {
   var map = {};
   rooms.forEach(function (r) { map[String(r.id)] = r; });
   return map;
+}
+
+/**
+ * Return rooms indexed by id, served from a 60-second script cache.
+ * Avoids a tado° API round-trip on every QUERY intent when Google polls
+ * multiple devices in quick succession.
+ */
+function getCachedRoomsById_(tado, homeId) {
+  var cache = CacheService.getScriptCache();
+  var key   = 'ROOMS_' + homeId;
+  var hit   = cache.get(key);
+  if (hit) {
+    try { return indexRoomsById_(JSON.parse(hit)); } catch (e) { /* fall through */ }
+  }
+  var rooms = tado.getRooms(homeId) || [];
+  try { cache.put(key, JSON.stringify(rooms), 60); } catch (e) { /* cache best-effort */ }
+  return indexRoomsById_(rooms);
 }
 
 /** Clamp a requested setpoint into tado°'s supported heating range. */
@@ -808,6 +822,33 @@ function redirectHtml_(url) {
       '<a href="' + forAttr + '" target="_top">tap here to continue</a>.</p>' +
       '</body></html>')
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+}
+
+// ===========================================================================
+// Keep-warm trigger
+// ===========================================================================
+
+/**
+ * Ping the Web App to keep the V8 runtime warm between Google Home polls.
+ *
+ * Apps Script cold-starts take 1–3 s. If Google's fulfillment request arrives
+ * while the runtime is cold it times out and marks devices as offline/error.
+ * Schedule this function on a time-based trigger every 5 minutes.
+ *
+ * Setup: Apps Script editor → Triggers → Add trigger
+ *   Function: keepWarm   Event source: Time-driven   Type: Minutes timer   Every 5 minutes
+ */
+function keepWarm() {
+  var url = ScriptApp.getService().getUrl();
+  if (!url) {
+    console.warn('keepWarm: Web App URL not available — is the script deployed as a Web App?');
+    return;
+  }
+  try {
+    UrlFetchApp.fetch(url, { muteHttpExceptions: true });
+  } catch (e) {
+    console.warn('keepWarm: ping failed — ' + e.message);
+  }
 }
 
 // ===========================================================================
