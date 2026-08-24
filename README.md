@@ -141,7 +141,7 @@ Create two **time-based triggers** in Apps Script:
 | `apiReportStateAndNotification` | Every 5 minutes | Push current device state to HomeGraph so Google Home stays in sync |
 | `keepWarm` | Every 5 minutes | Ping the Web App to prevent cold-start timeouts on Google Home QUERY requests |
 
-If rooms are added or removed in tado°, run `apiRequestSync()` manually (or trigger it) to ask Google to re-run SYNC.
+If rooms are added or removed in tado°, or after any deployment that changes the device list, run `apiRequestSync()` manually (or trigger it) to ask Google to re-run SYNC and re-discover all devices.
 
 ---
 
