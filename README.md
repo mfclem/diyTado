@@ -59,6 +59,8 @@ Plus four whole-home devices:
 
 **State reporting** — devices marked `willReportState: true` (thermostats, sensors, Set Home, Set Away) push live state to HomeGraph via `apiReportStateAndNotification()`. Momentary switches (boost, resume, per-room resume) are polled on demand.
 
+**Caching** — `apiReportStateAndNotification()` pre-populates a 6-minute `CacheService` cache with the latest rooms and presence data. Google Home QUERY intents served within that window make zero tado° API calls, keeping fulfillment latency well within Google's timeout.
+
 ---
 
 ## Prerequisites
