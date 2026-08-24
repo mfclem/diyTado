@@ -12,12 +12,10 @@ jobs:
 
     steps:
       - name: Checkout du code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Configuration de Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '24' # Clasp nécessite une version récente de Node
+        uses: actions/setup-node@v5
 
       - name: Installation de Clasp
         run: npm install -g @google/clasp
