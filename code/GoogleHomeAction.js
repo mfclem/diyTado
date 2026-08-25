@@ -521,7 +521,7 @@ function onQuery_(payload) {
         try {
           var st = tado.getHomeState(homeId);
           presence = st && st.presence;
-          try { cache.put('PRESENCE_' + homeId, presence || '', 360); } catch (e) {}
+          try { cache.put('PRESENCE_' + homeId, presence || '', 60); } catch (e) {}
         } catch (e) { presence = null; }
       }
     }
@@ -775,7 +775,7 @@ function getCachedRoomsById_(tado, homeId) {
     try { return indexRoomsById_(JSON.parse(hit)); } catch (e) { /* fall through */ }
   }
   var rooms = tado.getRooms(homeId) || [];
-  try { cache.put(key, JSON.stringify(rooms), 360); } catch (e) { /* cache best-effort */ }
+  try { cache.put(key, JSON.stringify(rooms), 60); } catch (e) { /* cache best-effort */ }
   return indexRoomsById_(rooms);
 }
 
