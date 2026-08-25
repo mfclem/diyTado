@@ -410,7 +410,7 @@ function onSync_() {
       deviceInfo: { manufacturer: 'tado', model: 'tado-X-sensor' },
       roomHint: roomName
     });
-
+/*
     // Heating sensor — ACTIVE / INACTIVE (binary; heatingPower > 0).
     devices.push({
       id:   deviceId_('heating', homeId, rid),
@@ -448,7 +448,7 @@ function onSync_() {
       deviceInfo: { manufacturer: 'tado', model: 'tado-X-sensor' },
       roomHint: roomName
     });
-
+*/
     // Per-room resume switch — momentary, turning ON resumes schedule.
     devices.push({
       id:   deviceId_('resumeroom', homeId, rid),
