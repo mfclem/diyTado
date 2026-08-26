@@ -251,7 +251,7 @@ function generateStatesAndNotifications(devices) {
   // Fetch rooms and write to cache — the QUERY fulfillment handler reads from
   // this cache so it rarely needs to call tado° live.
   var rooms = tado.getRooms(homeId) || [];
-  try { cache.put('ROOMS_' + homeId, JSON.stringify(rooms), 60); } catch (e) {}
+  try { cache.put('ROOMS_' + homeId, JSON.stringify(rooms), 10); } catch (e) {}
   var roomsById = indexRoomsById_(rooms);
 
   // Presence is fetched lazily once and also written to cache.
@@ -262,7 +262,7 @@ function generateStatesAndNotifications(devices) {
       try {
         var st = tado.getHomeState(homeId);
         presence = st && st.presence;  // 'HOME' | 'AWAY'
-        try { cache.put('PRESENCE_' + homeId, presence || '', 60); } catch (e) {}
+        try { cache.put('PRESENCE_' + homeId, presence || '', 10); } catch (e) {}
       } catch (e) { presence = null; }
     }
     return presence;
