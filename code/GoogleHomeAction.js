@@ -474,7 +474,7 @@ function onSync_() {
   devices.push(switchDevice_('home',   homeId, 'Set Home',         true));
   devices.push(switchDevice_('away',   homeId, 'Set Away',         true));
   devices.push(switchDevice_('boost',  homeId, 'Boost Heating',    false));
-  devices.push(switchDevice_('resume', homeId, 'Resume Schedule',  false));
+  devices.push(switchDevice_('resume', homeId, 'Activate Schedule', false));
 
   return {
     agentUserId: props.getProperty(GH.AGENT_USER_ID) || ('tado-' + homeId),

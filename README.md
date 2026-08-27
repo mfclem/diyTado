@@ -55,7 +55,9 @@ Plus four whole-home devices:
 | `Set Home` | Switch | Sets presence to HOME (manual lock) |
 | `Set Away` | Switch | Sets presence to AWAY (manual lock) |
 | `Boost Heating` | Switch | Activates boost mode for all rooms |
-| `Resume Schedule` | Switch | Resumes schedule for all rooms |
+| `Activate Schedule` | Switch | Immediately activates the tado° schedule for all rooms, clearing all manual overrides |
+
+Per-room `Resume <Room>` switches hand back to the schedule at the **next block boundary** (keeping the current temperature until then). `Activate Schedule` acts **immediately** across all rooms.
 
 **State reporting** — devices marked `willReportState: true` (thermostats, sensors, Set Home, Set Away) push live state to HomeGraph via `apiReportStateAndNotification()`. Momentary switches (boost, resume, per-room resume) are polled on demand.
 
