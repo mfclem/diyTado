@@ -54,6 +54,7 @@ Plus four whole-home devices:
 |---|---|---|
 | `Presence` | Switch | on = HOME, off = AWAY. State always reflects real tado° presence. Toggling sets the presence lock accordingly |
 | `Boost Heating` | Switch | Activates boost mode for all rooms |
+| `Heating Off` | Switch | Turns off all rooms with a manual hold. Use `Activate Schedule` to restore heating |
 | `Activate Schedule` | Switch | Immediately activates the tado° schedule for all rooms, clearing all manual overrides |
 
 Per-room `Resume <Room>` switches hand back to the schedule at the **next block boundary** (keeping the current temperature until then). `Activate Schedule` acts **immediately** across all rooms.

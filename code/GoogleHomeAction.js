@@ -36,6 +36,9 @@
  *   • "Presence"           → SWITCH (OnOff → presenceLock HOME/AWAY; STATEFUL)
  *       on = HOME, off = AWAY. State always reflects real tado° presence.
  *   • "Boost Heating"      → SWITCH (OnOff → quickActions/boost; momentary)
+ *   • "Heating Off"        → SWITCH (OnOff → turnRoomOff on every room; momentary)
+ *       Turns off all rooms with MANUAL termination. Use "Activate Schedule"
+ *       to restore heating.
  *   • "Activate Schedule"  → SWITCH (OnOff → quickActions/resumeSchedule; momentary)
  *       Immediately activates the tado° schedule for ALL rooms, clearing all
  *       manual overrides at once. Distinct from per-room "Resume <Room>" which
@@ -481,9 +484,10 @@ function onSync_() {
   // switches reliably show as tiles, appear in the automation action picker,
   // and respond to voice in the current Google Home app.
   // presence is stateful (on = HOME, off = AWAY) → willReportState: true.
-  // boost/activate-schedule are momentary (no persistent state) → willReportState: false.
-  devices.push(switchDevice_('presence', homeId, 'Presence',         true));
-  devices.push(switchDevice_('boost',    homeId, 'Boost Heating',    false));
+  // boost/alloff/activate-schedule are momentary (no persistent state) → willReportState: false.
+  devices.push(switchDevice_('presence', homeId, 'Presence',          true));
+  devices.push(switchDevice_('boost',    homeId, 'Boost Heating',     false));
+  devices.push(switchDevice_('alloff',   homeId, 'Heating Off',       false));
   devices.push(switchDevice_('resume',   homeId, 'Activate Schedule', false));
 
   return {
@@ -692,6 +696,7 @@ function runExecution_(tado, homeId, parsed, exec) {
     switch (parsed.kind) {
       case 'presence': tado.setPresence(homeId, on ? 'HOME' : 'AWAY'); break;
       case 'boost':    if (on) tado.setBoost(homeId);                  break;
+      case 'alloff':   if (on) tado.turnAllRoomsOff(homeId);           break;
       case 'resume':   if (on) tado.resumeSchedule(homeId);            break;
       default: throw new Error('Unknown switch: ' + parsed.kind);
     }
@@ -721,7 +726,7 @@ function onDisconnect_() {
 //          heating-<homeId>-<roomId>         heating sensor
 //          humidity-<homeId>-<roomId>        humidity sensor
 //          resumeroom-<homeId>-<roomId>      per-room resume switch
-//          <kind>-<homeId>                   whole-home switches (presence/boost/resume)
+//          <kind>-<homeId>                   whole-home switches (presence/boost/alloff/resume)
 
 function deviceId_(kind, homeId, roomId) {
   var id = kind + '-' + homeId;
