@@ -565,7 +565,7 @@ function onQuery_(payload) {
       var p = currentPresence_();
       out[d.id] = { online: true, status: 'SUCCESS', on: p === 'HOME' };
     } else {
-      // boost / resume are momentary actions with no persistent state.
+      // boost / resume / alloff are momentary actions with no persistent state.
       out[d.id] = { online: true, status: 'SUCCESS', on: false };
     }
   });
