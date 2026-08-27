@@ -33,8 +33,8 @@
  *   • "Room X — Humidity" sensors  (willReportState: true)
  *       Reports: humidityAmbientPercent.
  *
- *   • "Set Home" / "Set Away" switches  (willReportState: true)
- *       Reports: on = (current tado° presence === 'HOME' / 'AWAY').
+ *   • "Presence" switch  (willReportState: true)
+ *       Reports: on = (current tado° presence === 'HOME'), off = AWAY.
  *
  *   • "Boost Heating" / "Activate Schedule" whole-home switches  (willReportState: false)
  *   • "Resume <Room>" per-room switches  (willReportState: false)
@@ -328,13 +328,10 @@ function generateStatesAndNotifications(devices) {
         };
       }
 
-    } else if (parsed.kind === 'home' || parsed.kind === 'away') {
-      // Stateful presence switches — reflect the real tado° HOME/AWAY value.
+    } else if (parsed.kind === 'presence') {
+      // Stateful presence switch — on = HOME, off = AWAY.
       var p = currentPresence_();
-      states[d.id] = {
-        online: true,
-        on: parsed.kind === 'home' ? (p === 'HOME') : (p === 'AWAY')
-      };
+      states[d.id] = { online: true, on: p === 'HOME' };
 
     }
     // resumeroom / boost / resume are momentary (willReportState: false) — excluded.

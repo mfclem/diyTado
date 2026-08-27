@@ -33,8 +33,8 @@
  *       Hands back to schedule at the next scheduled block boundary.
  *
  *   Whole-home:
- *   • "Set Home"           → SWITCH (OnOff → presenceLock HOME; STATEFUL)
- *   • "Set Away"           → SWITCH (OnOff → presenceLock AWAY; STATEFUL)
+ *   • "Presence"           → SWITCH (OnOff → presenceLock HOME/AWAY; STATEFUL)
+ *       on = HOME, off = AWAY. State always reflects real tado° presence.
  *   • "Boost Heating"      → SWITCH (OnOff → quickActions/boost; momentary)
  *   • "Activate Schedule"  → SWITCH (OnOff → quickActions/resumeSchedule; momentary)
  *       Immediately activates the tado° schedule for ALL rooms, clearing all
@@ -480,12 +480,11 @@ function onSync_() {
   // Whole-home actions modeled as SWITCH (OnOff) devices. Unlike SCENE devices,
   // switches reliably show as tiles, appear in the automation action picker,
   // and respond to voice in the current Google Home app.
-  // home/away are stateful (reflect real presence) → willReportState: true.
-  // boost/resume are momentary (no persistent state) → willReportState: false.
-  devices.push(switchDevice_('home',   homeId, 'Set Home',         true));
-  devices.push(switchDevice_('away',   homeId, 'Set Away',         true));
-  devices.push(switchDevice_('boost',  homeId, 'Boost Heating',    false));
-  devices.push(switchDevice_('resume', homeId, 'Activate Schedule', false));
+  // presence is stateful (on = HOME, off = AWAY) → willReportState: true.
+  // boost/activate-schedule are momentary (no persistent state) → willReportState: false.
+  devices.push(switchDevice_('presence', homeId, 'Presence',         true));
+  devices.push(switchDevice_('boost',    homeId, 'Boost Heating',    false));
+  devices.push(switchDevice_('resume',   homeId, 'Activate Schedule', false));
 
   return {
     agentUserId: props.getProperty(GH.AGENT_USER_ID) || ('tado-' + homeId),
@@ -558,12 +557,9 @@ function onQuery_(payload) {
     } else if (parsed.kind === 'resumeroom') {
       // Momentary switch — always reads back OFF.
       out[d.id] = { online: true, status: 'SUCCESS', on: false };
-    } else if (parsed.kind === 'home' || parsed.kind === 'away') {
-      // Stateful presence switches: reflect the real tado° presence, mutually
-      // exclusive. If presence is unknown, fall back to off.
+    } else if (parsed.kind === 'presence') {
       var p = currentPresence_();
-      var isOn = (parsed.kind === 'home') ? (p === 'HOME') : (p === 'AWAY');
-      out[d.id] = { online: true, status: 'SUCCESS', on: isOn };
+      out[d.id] = { online: true, status: 'SUCCESS', on: p === 'HOME' };
     } else {
       // boost / resume are momentary actions with no persistent state.
       out[d.id] = { online: true, status: 'SUCCESS', on: false };
@@ -693,14 +689,11 @@ function runExecution_(tado, homeId, parsed, exec) {
     // turning it OFF is a no-op (there is nothing to "un-boost" cleanly, and
     // Home/Away are set via their own switches). We always echo back the
     // requested on-state so Google shows the toggle as accepted.
-    if (on) {
-      switch (parsed.kind) {
-        case 'home':   tado.setPresence(homeId, 'HOME'); break;
-        case 'away':   tado.setPresence(homeId, 'AWAY'); break;
-        case 'boost':  tado.setBoost(homeId);            break;
-        case 'resume': tado.resumeSchedule(homeId);      break;
-        default: throw new Error('Unknown switch: ' + parsed.kind);
-      }
+    switch (parsed.kind) {
+      case 'presence': tado.setPresence(homeId, on ? 'HOME' : 'AWAY'); break;
+      case 'boost':    if (on) tado.setBoost(homeId);                  break;
+      case 'resume':   if (on) tado.resumeSchedule(homeId);            break;
+      default: throw new Error('Unknown switch: ' + parsed.kind);
     }
     return { on: on };
   }
@@ -728,7 +721,7 @@ function onDisconnect_() {
 //          heating-<homeId>-<roomId>         heating sensor
 //          humidity-<homeId>-<roomId>        humidity sensor
 //          resumeroom-<homeId>-<roomId>      per-room resume switch
-//          <kind>-<homeId>                   whole-home switches (home/away/boost/resume)
+//          <kind>-<homeId>                   whole-home switches (presence/boost/resume)
 
 function deviceId_(kind, homeId, roomId) {
   var id = kind + '-' + homeId;

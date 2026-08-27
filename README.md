@@ -52,8 +52,7 @@ Plus four whole-home devices:
 
 | Device name | Type | What it does |
 |---|---|---|
-| `Set Home` | Switch | Sets presence to HOME (manual lock) |
-| `Set Away` | Switch | Sets presence to AWAY (manual lock) |
+| `Presence` | Switch | on = HOME, off = AWAY. State always reflects real tado° presence. Toggling sets the presence lock accordingly |
 | `Boost Heating` | Switch | Activates boost mode for all rooms |
 | `Activate Schedule` | Switch | Immediately activates the tado° schedule for all rooms, clearing all manual overrides |
 
