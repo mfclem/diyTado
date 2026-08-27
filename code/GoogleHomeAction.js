@@ -501,29 +501,21 @@ function onQuery_(payload) {
   var wanted = (payload && payload.devices) || [];
   var tado   = tadoClient_();
 
-  //Logger.log("onQuery");
+  console.log("onQuery");
 
-  // Rooms are cached for 60 s — QUERY is called frequently and getRooms() is
-  // the most expensive call on the critical fulfillment path.
-  var roomsById = getCachedRoomsById_(tado, homeId);
+  // One rooms call, indexed by room id, reused for every requested device.
+  var roomsById = indexRoomsById_(tado.getRooms(homeId) || []);
 
-  // Home presence is fetched lazily and only once — served from cache when
-  // available so no live tado° call is needed on the fulfillment path.
+  // Home presence is fetched lazily and only once — a QUERY that asks about
+  // rooms only should not incur an extra /state call.
   var presence = null, presenceFetched = false;
   function currentPresence_() {
     if (!presenceFetched) {
       presenceFetched = true;
-      var cache = CacheService.getScriptCache();
-      var hit   = cache.get('PRESENCE_' + homeId);
-      if (hit !== null) {
-        presence = hit || null;  // empty string stored when presence was null
-      } else {
-        try {
-          var st = tado.getHomeState(homeId);
-          presence = st && st.presence;
-          try { cache.put('PRESENCE_' + homeId, presence || '', 10); } catch (e) {}
-        } catch (e) { presence = null; }
-      }
+      try {
+        var st = tado.getHomeState(homeId);
+        presence = st && st.presence;   // 'HOME' | 'AWAY'
+      } catch (e) { presence = null; }
     }
     return presence;
   }
@@ -762,23 +754,6 @@ function indexRoomsById_(rooms) {
   return map;
 }
 
-/**
- * Return rooms indexed by id, served from a 60-second script cache.
- * Avoids a tado° API round-trip on every QUERY intent when Google polls
- * multiple devices in quick succession.
- */
-function getCachedRoomsById_(tado, homeId) {
-  var cache = CacheService.getScriptCache();
-  var key   = 'ROOMS_' + homeId;
-  var hit   = cache.get(key);
-  if (hit) {
-    try { return indexRoomsById_(JSON.parse(hit)); } catch (e) { /* fall through */ }
-  }
-  var rooms = tado.getRooms(homeId) || [];
-  try { cache.put(key, JSON.stringify(rooms), 10); } catch (e) { /* cache best-effort */ }
-  return indexRoomsById_(rooms);
-}
-
 /** Clamp a requested setpoint into tado°'s supported heating range. */
 function clampTemp_(celsius) {
   var c = Number(celsius);
@@ -831,33 +806,6 @@ function redirectHtml_(url) {
       '<a href="' + forAttr + '" target="_top">tap here to continue</a>.</p>' +
       '</body></html>')
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
-}
-
-// ===========================================================================
-// Keep-warm trigger
-// ===========================================================================
-
-/**
- * Ping the Web App to keep the V8 runtime warm between Google Home polls.
- *
- * Apps Script cold-starts take 1–3 s. If Google's fulfillment request arrives
- * while the runtime is cold it times out and marks devices as offline/error.
- * Schedule this function on a time-based trigger every 5 minutes.
- *
- * Setup: Apps Script editor → Triggers → Add trigger
- *   Function: keepWarm   Event source: Time-driven   Type: Minutes timer   Every 5 minutes
- */
-function keepWarm() {
-  var url = ScriptApp.getService().getUrl();
-  if (!url) {
-    console.warn('keepWarm: Web App URL not available — is the script deployed as a Web App?');
-    return;
-  }
-  try {
-    UrlFetchApp.fetch(url, { muteHttpExceptions: true });
-  } catch (e) {
-    console.warn('keepWarm: ping failed — ' + e.message);
-  }
 }
 
 // ===========================================================================

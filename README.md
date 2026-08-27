@@ -59,8 +59,6 @@ Plus four whole-home devices:
 
 **State reporting** — devices marked `willReportState: true` (thermostats, sensors, Set Home, Set Away) push live state to HomeGraph via `apiReportStateAndNotification()`. Momentary switches (boost, resume, per-room resume) are polled on demand.
 
-**Caching** — `apiReportStateAndNotification()` pre-populates a 6-minute `CacheService` cache with the latest rooms and presence data. Google Home QUERY intents served within that window make zero tado° API calls, keeping fulfillment latency well within Google's timeout.
-
 ---
 
 ## Prerequisites
@@ -132,14 +130,9 @@ Create a **Cloud-to-cloud** integration:
 
 In the Google Home app, add the `[test]` integration and link the account. Your rooms and devices will appear.
 
-### 6. Set up proactive state reporting and keep-warm (recommended)
+### 6. Set up proactive state reporting (recommended)
 
-Create two **time-based triggers** in Apps Script:
-
-| Function | Interval | Purpose |
-|---|---|---|
-| `apiReportStateAndNotification` | Every 5 minutes | Push current device state to HomeGraph so Google Home stays in sync |
-| `keepWarm` | Every 5 minutes | Ping the Web App to prevent cold-start timeouts on Google Home QUERY requests |
+Create a **time-based trigger** in Apps Script on `apiReportStateAndNotification()` — every 5 minutes is a good interval. This keeps Google Home in sync without waiting for a poll.
 
 If rooms are added or removed in tado°, or after any deployment that changes the device list, run `apiRequestSync()` manually (or trigger it) to ask Google to re-run SYNC and re-discover all devices.
 
@@ -177,7 +170,6 @@ Run these directly from the Apps Script editor to validate without Google Home:
 | `test_sync()` | Logs the full SYNC payload |
 | `test_query()` | Logs QUERY state for every thermostat room |
 | `test_executeSetpoint()` | Sets the first room to 21 °C via the EXECUTE path (live write) |
-| `keepWarm()` | Pings the Web App to warm the runtime (normally run via trigger) |
 | `apiQuery()` | Queries HomeGraph for current device states |
 | `apiReportStateAndNotification()` | Pushes current state to HomeGraph immediately |
 

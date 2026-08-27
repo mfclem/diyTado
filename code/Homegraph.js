@@ -246,15 +246,13 @@ function getSyncDevicesIds() {
 function generateStatesAndNotifications(devices) {
   var homeId = requireHomeId_();
   var tado   = tadoClient_();
-  var cache  = CacheService.getScriptCache();
 
-  // Fetch rooms and write to cache — the QUERY fulfillment handler reads from
-  // this cache so it rarely needs to call tado° live.
+  // One rooms call, indexed by room id, reused for every requested device.
   var rooms = tado.getRooms(homeId) || [];
-  try { cache.put('ROOMS_' + homeId, JSON.stringify(rooms), 10); } catch (e) {}
   var roomsById = indexRoomsById_(rooms);
 
-  // Presence is fetched lazily once and also written to cache.
+  // Presence is fetched lazily once — only if at least one home/away switch is
+  // in the device list.
   var presence = null, presenceFetched = false;
   function currentPresence_() {
     if (!presenceFetched) {
@@ -262,7 +260,6 @@ function generateStatesAndNotifications(devices) {
       try {
         var st = tado.getHomeState(homeId);
         presence = st && st.presence;  // 'HOME' | 'AWAY'
-        try { cache.put('PRESENCE_' + homeId, presence || '', 10); } catch (e) {}
       } catch (e) { presence = null; }
     }
     return presence;
