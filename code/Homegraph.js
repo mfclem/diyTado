@@ -25,7 +25,10 @@
  *                online (reflects room connection state).
  *
  *   • "Room X — Open Window" sensors  (willReportState: true)
- *       Reports: openPercent (0 = closed, 100 = open).
+ *       Reports: openPercent (0 = no window detected, 100 = window detected).
+ *
+ *   • "Room X — Open Window Mode" switches  (willReportState: true)
+ *       Reports: on = heating suspended (openWindow.activated:true).
  *
  *   • "Room X — Heating" sensors  (willReportState: true)
  *       Reports: currentSensorStateData HeatingActive = ACTIVE | INACTIVE.
@@ -304,6 +307,15 @@ function generateStatesAndNotifications(devices) {
         states[d.id] = {
           online: true,
           openPercent: room.openWindow ? 100 : 0
+        };
+      }
+
+    } else if (parsed.kind === 'openwindowmode') {
+      var room = roomsById[parsed.roomId];
+      if (room) {
+        states[d.id] = {
+          online: true,
+          on: !!(room.openWindow && room.openWindow.activated)
         };
       }
 

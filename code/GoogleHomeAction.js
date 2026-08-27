@@ -26,7 +26,11 @@
  *       off  = manual power off
  *       heat = manual temperature hold
  *       auto = resume schedule at next block boundary (NEXT_TIME_BLOCK)
- *   • "<Room> — Open Window"  → SENSOR (OpenClose; STATEFUL, willReportState)
+ *   • "<Room> — Open Window"      → SENSOR (OpenClose; STATEFUL, willReportState)
+ *       openPercent:100 when tado° detects an open window (activated or not).
+ *   • "<Room> — Open Window Mode"  → SWITCH (OnOff; STATEFUL, willReportState)
+ *       on = heating suspended (openWindow.activated:true);
+ *       off = no active suspension. Turning on calls setOpenWindow, off calls deleteOpenWindow.
  *   • "<Room> — Heating"      → SENSOR (SensorState ACTIVE/INACTIVE; STATEFUL, willReportState)
  *   • "<Room> — Humidity"     → SENSOR (HumiditySetting %; STATEFUL, willReportState)
  *   • "Resume <Room>"         → SWITCH (OnOff → NEXT_TIME_BLOCK termination; momentary)
@@ -424,6 +428,22 @@ function onSync_() {
       deviceInfo: { manufacturer: 'tado', model: 'tado-X-sensor' },
       roomHint: roomName
     });
+
+    // Open-window mode switch — stateful, on = heating suspended, off = normal.
+    devices.push({
+      id:   deviceId_('openwindowmode', homeId, rid),
+      type: 'action.devices.types.SWITCH',
+      traits: ['action.devices.traits.OnOff'],
+      name: {
+        name: roomName + ' — Open Window Mode',
+        defaultNames: ['tado ' + roomName + ' open window mode'],
+        nicknames: [roomName + ' open window mode']
+      },
+      willReportState: true,
+      attributes: {},
+      deviceInfo: { manufacturer: 'tado', model: 'tado-X-action' },
+      roomHint: roomName
+    });
 /*
     // Heating sensor — ACTIVE / INACTIVE (binary; heatingPower > 0).
     devices.push({
@@ -542,8 +562,12 @@ function onQuery_(payload) {
       out[d.id] = room ? roomToQueryState_(room) : { online: false, status: 'ERROR', errorCode: 'deviceNotFound' };
     } else if (parsed.kind === 'openwindow') {
       var room = roomsById[parsed.roomId];
-      var isOpen = !!(room && room.openWindow);
-      out[d.id] = { online: true, status: 'SUCCESS', openPercent: isOpen ? 100 : 0 };
+      // openWindow is non-null when a window is detected (activated or not).
+      out[d.id] = { online: true, status: 'SUCCESS', openPercent: (room && room.openWindow) ? 100 : 0 };
+    } else if (parsed.kind === 'openwindowmode') {
+      var room = roomsById[parsed.roomId];
+      // activated:true means heating is suspended; activated:false means detected but not yet accepted.
+      out[d.id] = { online: true, status: 'SUCCESS', on: !!(room && room.openWindow && room.openWindow.activated) };
     } else if (parsed.kind === 'heating') {
       var room = roomsById[parsed.roomId];
       var pct  = room && room.heatingPower && typeof room.heatingPower.percentage === 'number'
@@ -678,6 +702,18 @@ function runExecution_(tado, homeId, parsed, exec) {
     throw new Error('Unsupported thermostat command: ' + cmd);
   }
 
+  // --- Per-room open-window mode switch ---
+  if (parsed.kind === 'openwindowmode') {
+    if (cmd === 'action.devices.commands.OnOff') {
+      if (params.on === true) {
+        tado.setOpenWindow(homeId, parsed.roomId);
+      } else {
+        tado.deleteOpenWindow(homeId, parsed.roomId);
+      }
+    }
+    return { on: params.on === true };
+  }
+
   // --- Per-room resume switch ---
   if (parsed.kind === 'resumeroom') {
     if (cmd === 'action.devices.commands.OnOff' && params.on === true) {
@@ -723,6 +759,7 @@ function onDisconnect_() {
 // ===========================================================================
 // Format:  room-<homeId>-<roomId>           thermostat
 //          openwindow-<homeId>-<roomId>      open-window sensor
+//          openwindowmode-<homeId>-<roomId>   open-window mode switch
 //          heating-<homeId>-<roomId>         heating sensor
 //          humidity-<homeId>-<roomId>        humidity sensor
 //          resumeroom-<homeId>-<roomId>      per-room resume switch

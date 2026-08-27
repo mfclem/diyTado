@@ -43,7 +43,8 @@ For every tado° X room the integration creates five devices:
 | Device name | Type | Trait | What it does |
 |---|---|---|---|
 | `<Room>` | Thermostat | `TemperatureSetting` | Read/set temperature; modes: `off` / `heat` (manual hold) / `auto` (resume schedule) |
-| `<Room> — Open Window` | Sensor | `OpenClose` | Reports whether open-window mode is active |
+| `<Room> — Open Window` | Sensor | `OpenClose` | Reports whether tado° has detected an open window (temperature drop detection), regardless of whether heating suspension has been accepted |
+| `<Room> — Open Window Mode` | Switch | `OnOff` | Stateful — on = heating suspended; off = normal. Turning on activates open-window mode (suspends heating); turning off clears it |
 | `<Room> — Heating` | Sensor | `SensorState` | Reports ACTIVE / INACTIVE based on heating power |
 | `<Room> — Humidity` | Sensor | `HumiditySetting` | Reports ambient humidity percentage |
 | `Resume <Room>` | Switch | `OnOff` | Momentary — turning ON resumes the tado° schedule for that room |
