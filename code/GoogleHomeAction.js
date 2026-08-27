@@ -20,19 +20,30 @@
  *   Fulfillment URL   : https://script.google.com/.../exec?k=<KEY>
  *
  * DEVICE MAPPING (tado°X):
- *   • Each heating room  → THERMOSTAT (TemperatureSetting: off/heat, °C)
- *   • "Set Home"         → SWITCH (OnOff → presenceLock HOME; STATEFUL)
- *   • "Set Away"         → SWITCH (OnOff → presenceLock AWAY; STATEFUL)
- *   • "Boost Heating"    → SWITCH (OnOff → quickActions/boost; momentary)
- *   • "Resume Schedule"  → SWITCH (OnOff → quickActions/resumeSchedule; momentary)
- *   The four whole-home actions are SWITCHES (not SCENES) because the current
- *   Google Home app reliably surfaces switches as tiles, in the automation
- *   action picker, and by voice — whereas cloud SCENE devices often do not
- *   appear in the automations UI at all.
- *   Set Home / Set Away are STATEFUL and mutually exclusive: their on/off state
- *   reflects the real tado° presence (GET /homes/{id}/state → presence), so the
- *   tiles show the current HOME/AWAY status. Boost / Resume are momentary —
- *   turning them ON fires the action, and they always read back OFF.
+ *
+ *   Per room (one set per tado° X room):
+ *   • <Room>                → THERMOSTAT (TemperatureSetting: off / heat / auto)
+ *       off  = manual power off
+ *       heat = manual temperature hold
+ *       auto = resume schedule at next block boundary (NEXT_TIME_BLOCK)
+ *   • "<Room> — Open Window"  → SENSOR (OpenClose; STATEFUL, willReportState)
+ *   • "<Room> — Heating"      → SENSOR (SensorState ACTIVE/INACTIVE; STATEFUL, willReportState)
+ *   • "<Room> — Humidity"     → SENSOR (HumiditySetting %; STATEFUL, willReportState)
+ *   • "Resume <Room>"         → SWITCH (OnOff → NEXT_TIME_BLOCK termination; momentary)
+ *       Hands back to schedule at the next scheduled block boundary.
+ *
+ *   Whole-home:
+ *   • "Set Home"           → SWITCH (OnOff → presenceLock HOME; STATEFUL)
+ *   • "Set Away"           → SWITCH (OnOff → presenceLock AWAY; STATEFUL)
+ *   • "Boost Heating"      → SWITCH (OnOff → quickActions/boost; momentary)
+ *   • "Activate Schedule"  → SWITCH (OnOff → quickActions/resumeSchedule; momentary)
+ *       Immediately activates the tado° schedule for ALL rooms, clearing all
+ *       manual overrides at once. Distinct from per-room "Resume <Room>" which
+ *       only takes effect at the next block boundary.
+ *
+ *   All SWITCH devices use OnOff. Whole-home switches and per-room resume are
+ *   momentary — turning ON fires the action; they always read back OFF.
+ *   Set Home / Set Away are STATEFUL and mutually exclusive.
  *
  * ---------------------------------------------------------------------------
  * SECURITY MODEL

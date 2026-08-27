@@ -36,8 +36,8 @@
  *   • "Set Home" / "Set Away" switches  (willReportState: true)
  *       Reports: on = (current tado° presence === 'HOME' / 'AWAY').
  *
- *   • "Boost Heating" / "Resume Schedule" whole-home switches  (willReportState: false)
- *   • "Resume Room X" per-room switches  (willReportState: false)
+ *   • "Boost Heating" / "Activate Schedule" whole-home switches  (willReportState: false)
+ *   • "Resume <Room>" per-room switches  (willReportState: false)
  *       Momentary actions — no persistent state, excluded from proactive reporting.
  *
  * PREREQUISITES — Script Properties (set via Project Settings → Properties)
