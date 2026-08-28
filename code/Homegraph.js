@@ -361,7 +361,7 @@ function generateStatesAndNotifications(devices) {
       states[d.id] = { online: true, on: p === 'HOME' };
 
     }
-    // resumeroom / boost / resume are momentary (willReportState: false) — excluded.
+    // resumeroom / boost / resume / alloff are momentary (willReportState: false) — excluded.
   });
 
   var statesAndNotifications = {
