@@ -33,8 +33,11 @@
  *       off = no active suspension. Turning on calls setOpenWindow, off calls deleteOpenWindow.
  *   • "<Room> — Heating"      → SENSOR (SensorState ACTIVE/INACTIVE; STATEFUL, willReportState)
  *   • "<Room> — Humidity"     → SENSOR (HumiditySetting %; STATEFUL, willReportState)
- *   • "Resume <Room>"         → SWITCH (OnOff → NEXT_TIME_BLOCK termination; momentary)
- *       Hands back to schedule at the next scheduled block boundary.
+ *   • "Resume <Room>"         → SWITCH (OnOff; STATEFUL, willReportState)
+ *       on  = manualControlTermination.type === NEXT_TIME_BLOCK (will resume at next block).
+ *       off = MANUAL / TIMER hold, or no override (following schedule freely).
+ *       Turning on  → NEXT_TIME_BLOCK termination.
+ *       Turning off → converts current setting to permanent MANUAL hold (no-op if no override).
  *
  *   Whole-home:
  *   • "Presence"           → SWITCH (OnOff → presenceLock HOME/AWAY; STATEFUL)
@@ -483,7 +486,11 @@ function onSync_() {
       roomHint: roomName
     });
 */
-    // Per-room resume switch — momentary, turning ON resumes schedule.
+    // Per-room resume switch — stateful.
+    // on  = manualControlTermination.type === 'NEXT_TIME_BLOCK' (will resume at next block).
+    // off = any other state (MANUAL hold, TIMER, or no override — i.e. following schedule).
+    // Turning on  → resumeRoomSchedule (NEXT_TIME_BLOCK termination).
+    // Turning off → re-applies current setting as a permanent MANUAL hold (no-op if already off).
     devices.push({
       id:   deviceId_('resumeroom', homeId, rid),
       type: 'action.devices.types.SWITCH',
@@ -493,7 +500,7 @@ function onSync_() {
         defaultNames: ['tado resume ' + roomName],
         nicknames: ['resume ' + roomName]
       },
-      willReportState: false,
+      willReportState: true,
       attributes: {},
       deviceInfo: { manufacturer: 'tado', model: 'tado-X-action' },
       roomHint: roomName
@@ -585,11 +592,15 @@ function onQuery_(payload) {
     } else if (parsed.kind === 'resumeroom') {
       // Momentary switch — always reads back OFF.
       out[d.id] = { online: true, status: 'SUCCESS', on: false };
+    } else if (parsed.kind === 'resumeroom') {
+      var room = roomsById[parsed.roomId];
+      var termination = room && room.manualControlTermination;
+      out[d.id] = { online: true, status: 'SUCCESS', on: !!(termination && termination.type === 'NEXT_TIME_BLOCK') };
     } else if (parsed.kind === 'presence') {
       var p = currentPresence_();
       out[d.id] = { online: true, status: 'SUCCESS', on: p === 'HOME' };
     } else {
-      // boost / resume / alloff are momentary actions with no persistent state.
+      // boost / resume (whole-home) / alloff are momentary actions with no persistent state.
       out[d.id] = { online: true, status: 'SUCCESS', on: false };
     }
   });
@@ -716,10 +727,28 @@ function runExecution_(tado, homeId, parsed, exec) {
 
   // --- Per-room resume switch ---
   if (parsed.kind === 'resumeroom') {
-    if (cmd === 'action.devices.commands.OnOff' && params.on === true) {
-      tado.resumeRoomSchedule(homeId, parsed.roomId);
+    if (cmd === 'action.devices.commands.OnOff') {
+      if (params.on === true) {
+        // Set NEXT_TIME_BLOCK termination — room resumes schedule at next block boundary.
+        tado.resumeRoomSchedule(homeId, parsed.roomId);
+      } else {
+        // Convert to permanent MANUAL hold at the current setting.
+        // No-op if no manual override is active (room already following schedule).
+        var room = indexRoomsById_(tado.getRooms(homeId) || [])[parsed.roomId] || {};
+        if (room.manualControlTermination) {
+          var setting = room.setting || {};
+          if (setting.power === 'OFF') {
+            tado.turnRoomOff(homeId, parsed.roomId, { type: 'MANUAL' });
+          } else {
+            var celsius = (setting.temperature && setting.temperature.value) || 21;
+            tado.setRoomTemperature(homeId, parsed.roomId, celsius, { type: 'MANUAL' });
+          }
+        }
+      }
     }
-    return { on: false };  // always reads back OFF (momentary)
+    var room = indexRoomsById_(tado.getRooms(homeId) || [])[parsed.roomId] || {};
+    var termination = room.manualControlTermination;
+    return { on: !!(termination && termination.type === 'NEXT_TIME_BLOCK') };
   }
 
   // --- Whole-home switches (OnOff) ---

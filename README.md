@@ -47,7 +47,7 @@ For every tado° X room the integration creates five devices:
 | `<Room> — Open Window Mode` | Switch | `OnOff` | Stateful — on = heating suspended; off = normal. Turning on activates open-window mode (suspends heating); turning off clears it |
 | `<Room> — Heating` | Sensor | `SensorState` | Reports ACTIVE / INACTIVE based on heating power |
 | `<Room> — Humidity` | Sensor | `HumiditySetting` | Reports ambient humidity percentage |
-| `Resume <Room>` | Switch | `OnOff` | Momentary — turning ON resumes the tado° schedule for that room |
+| `Resume <Room>` | Switch | `OnOff` | Stateful — on = room will resume schedule at next block boundary (`NEXT_TIME_BLOCK`); off = permanent manual hold or following schedule. Turning on sets `NEXT_TIME_BLOCK` termination; turning off converts to a permanent `MANUAL` hold |
 
 Plus four whole-home devices:
 

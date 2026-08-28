@@ -36,6 +36,9 @@
  *   • "Room X — Humidity" sensors  (willReportState: true)
  *       Reports: humidityAmbientPercent.
  *
+ *   • "Resume <Room>" switches  (willReportState: true)
+ *       Reports: on = manualControlTermination.type === NEXT_TIME_BLOCK.
+ *
  *   • "Presence" switch  (willReportState: true)
  *       Reports: on = (current tado° presence === 'HOME'), off = AWAY.
  *
@@ -269,8 +272,7 @@ function generateStatesAndNotifications(devices) {
   var rooms = tado.getRooms(homeId) || [];
   var roomsById = indexRoomsById_(rooms);
 
-  // Presence is fetched lazily once — only if at least one home/away switch is
-  // in the device list.
+  // Presence is fetched lazily once — only if presence switch is in the device list.
   var presence = null, presenceFetched = false;
   function currentPresence_() {
     if (!presenceFetched) {
@@ -355,13 +357,23 @@ function generateStatesAndNotifications(devices) {
         };
       }
 
+    } else if (parsed.kind === 'resumeroom') {
+      var room = roomsById[parsed.roomId];
+      if (room) {
+        var termination = room.manualControlTermination;
+        states[d.id] = {
+          online: true,
+          on: !!(termination && termination.type === 'NEXT_TIME_BLOCK')
+        };
+      }
+
     } else if (parsed.kind === 'presence') {
       // Stateful presence switch — on = HOME, off = AWAY.
-      var p = currentPresence_();
-      states[d.id] = { online: true, on: p === 'HOME' };
+      // var p = currentPresence_();
+      // states[d.id] = { online: true, on: p === 'HOME' };
 
     }
-    // resumeroom / boost / resume / alloff are momentary (willReportState: false) — excluded.
+    // boost / resume (whole-home) / alloff are momentary (willReportState: false) — excluded.
   });
 
   var statesAndNotifications = {
