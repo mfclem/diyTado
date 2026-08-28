@@ -25,7 +25,10 @@
  *                online (reflects room connection state).
  *
  *   • "Room X — Open Window" sensors  (willReportState: true)
- *       Reports: openPercent (0 = closed, 100 = open).
+ *       Reports: openPercent (0 = no window detected, 100 = window detected).
+ *
+ *   • "Room X — Open Window Mode" switches  (willReportState: true)
+ *       Reports: on = heating suspended (openWindow.activated:true).
  *
  *   • "Room X — Heating" sensors  (willReportState: true)
  *       Reports: currentSensorStateData HeatingActive = ACTIVE | INACTIVE.
@@ -33,11 +36,11 @@
  *   • "Room X — Humidity" sensors  (willReportState: true)
  *       Reports: humidityAmbientPercent.
  *
- *   • "Set Home" / "Set Away" switches  (willReportState: true)
- *       Reports: on = (current tado° presence === 'HOME' / 'AWAY').
+ *   • "Presence" switch  (willReportState: true)
+ *       Reports: on = (current tado° presence === 'HOME'), off = AWAY.
  *
- *   • "Boost Heating" / "Resume Schedule" whole-home switches  (willReportState: false)
- *   • "Resume Room X" per-room switches  (willReportState: false)
+ *   • "Boost Heating" / "Activate Schedule" whole-home switches  (willReportState: false)
+ *   • "Resume <Room>" per-room switches  (willReportState: false)
  *       Momentary actions — no persistent state, excluded from proactive reporting.
  *
  * PREREQUISITES — Script Properties (set via Project Settings → Properties)
@@ -246,15 +249,13 @@ function getSyncDevicesIds() {
 function generateStatesAndNotifications(devices) {
   var homeId = requireHomeId_();
   var tado   = tadoClient_();
-  var cache  = CacheService.getScriptCache();
 
-  // Fetch rooms and write to cache — the QUERY fulfillment handler reads from
-  // this cache so it rarely needs to call tado° live.
+  // One rooms call, indexed by room id, reused for every requested device.
   var rooms = tado.getRooms(homeId) || [];
-  try { cache.put('ROOMS_' + homeId, JSON.stringify(rooms), 10); } catch (e) {}
   var roomsById = indexRoomsById_(rooms);
 
-  // Presence is fetched lazily once and also written to cache.
+  // Presence is fetched lazily once — only if at least one home/away switch is
+  // in the device list.
   var presence = null, presenceFetched = false;
   function currentPresence_() {
     if (!presenceFetched) {
@@ -262,7 +263,6 @@ function generateStatesAndNotifications(devices) {
       try {
         var st = tado.getHomeState(homeId);
         presence = st && st.presence;  // 'HOME' | 'AWAY'
-        try { cache.put('PRESENCE_' + homeId, presence || '', 10); } catch (e) {}
       } catch (e) { presence = null; }
     }
     return presence;
@@ -310,6 +310,15 @@ function generateStatesAndNotifications(devices) {
         };
       }
 
+    } else if (parsed.kind === 'openwindowmode') {
+      var room = roomsById[parsed.roomId];
+      if (room) {
+        states[d.id] = {
+          online: true,
+          on: !!(room.openWindow && room.openWindow.activated)
+        };
+      }
+
     } else if (parsed.kind === 'heating') {
       var room = roomsById[parsed.roomId];
       if (room) {
@@ -331,13 +340,10 @@ function generateStatesAndNotifications(devices) {
         };
       }
 
-    } else if (parsed.kind === 'home' || parsed.kind === 'away') {
-      // Stateful presence switches — reflect the real tado° HOME/AWAY value.
+    } else if (parsed.kind === 'presence') {
+      // Stateful presence switch — on = HOME, off = AWAY.
       var p = currentPresence_();
-      states[d.id] = {
-        online: true,
-        on: parsed.kind === 'home' ? (p === 'HOME') : (p === 'AWAY')
-      };
+      states[d.id] = { online: true, on: p === 'HOME' };
 
     }
     // resumeroom / boost / resume are momentary (willReportState: false) — excluded.

@@ -20,19 +20,37 @@
  *   Fulfillment URL   : https://script.google.com/.../exec?k=<KEY>
  *
  * DEVICE MAPPING (tado°X):
- *   • Each heating room  → THERMOSTAT (TemperatureSetting: off/heat, °C)
- *   • "Set Home"         → SWITCH (OnOff → presenceLock HOME; STATEFUL)
- *   • "Set Away"         → SWITCH (OnOff → presenceLock AWAY; STATEFUL)
- *   • "Boost Heating"    → SWITCH (OnOff → quickActions/boost; momentary)
- *   • "Resume Schedule"  → SWITCH (OnOff → quickActions/resumeSchedule; momentary)
- *   The four whole-home actions are SWITCHES (not SCENES) because the current
- *   Google Home app reliably surfaces switches as tiles, in the automation
- *   action picker, and by voice — whereas cloud SCENE devices often do not
- *   appear in the automations UI at all.
- *   Set Home / Set Away are STATEFUL and mutually exclusive: their on/off state
- *   reflects the real tado° presence (GET /homes/{id}/state → presence), so the
- *   tiles show the current HOME/AWAY status. Boost / Resume are momentary —
- *   turning them ON fires the action, and they always read back OFF.
+ *
+ *   Per room (one set per tado° X room):
+ *   • <Room>                → THERMOSTAT (TemperatureSetting: off / heat / auto)
+ *       off  = manual power off
+ *       heat = manual temperature hold
+ *       auto = resume schedule at next block boundary (NEXT_TIME_BLOCK)
+ *   • "<Room> — Open Window"      → SENSOR (OpenClose; STATEFUL, willReportState)
+ *       openPercent:100 when tado° detects an open window (activated or not).
+ *   • "<Room> — Open Window Mode"  → SWITCH (OnOff; STATEFUL, willReportState)
+ *       on = heating suspended (openWindow.activated:true);
+ *       off = no active suspension. Turning on calls setOpenWindow, off calls deleteOpenWindow.
+ *   • "<Room> — Heating"      → SENSOR (SensorState ACTIVE/INACTIVE; STATEFUL, willReportState)
+ *   • "<Room> — Humidity"     → SENSOR (HumiditySetting %; STATEFUL, willReportState)
+ *   • "Resume <Room>"         → SWITCH (OnOff → NEXT_TIME_BLOCK termination; momentary)
+ *       Hands back to schedule at the next scheduled block boundary.
+ *
+ *   Whole-home:
+ *   • "Presence"           → SWITCH (OnOff → presenceLock HOME/AWAY; STATEFUL)
+ *       on = HOME, off = AWAY. State always reflects real tado° presence.
+ *   • "Boost Heating"      → SWITCH (OnOff → quickActions/boost; momentary)
+ *   • "Heating Off"        → SWITCH (OnOff → turnRoomOff on every room; momentary)
+ *       Turns off all rooms with MANUAL termination. Use "Activate Schedule"
+ *       to restore heating.
+ *   • "Activate Schedule"  → SWITCH (OnOff → quickActions/resumeSchedule; momentary)
+ *       Immediately activates the tado° schedule for ALL rooms, clearing all
+ *       manual overrides at once. Distinct from per-room "Resume <Room>" which
+ *       only takes effect at the next block boundary.
+ *
+ *   All SWITCH devices use OnOff. Whole-home switches and per-room resume are
+ *   momentary — turning ON fires the action; they always read back OFF.
+ *   Set Home / Set Away are STATEFUL and mutually exclusive.
  *
  * ---------------------------------------------------------------------------
  * SECURITY MODEL
@@ -410,6 +428,22 @@ function onSync_() {
       deviceInfo: { manufacturer: 'tado', model: 'tado-X-sensor' },
       roomHint: roomName
     });
+
+    // Open-window mode switch — stateful, on = heating suspended, off = normal.
+    devices.push({
+      id:   deviceId_('openwindowmode', homeId, rid),
+      type: 'action.devices.types.SWITCH',
+      traits: ['action.devices.traits.OnOff'],
+      name: {
+        name: roomName + ' — Open Window Mode',
+        defaultNames: ['tado ' + roomName + ' open window mode'],
+        nicknames: [roomName + ' open window mode']
+      },
+      willReportState: true,
+      attributes: {},
+      deviceInfo: { manufacturer: 'tado', model: 'tado-X-action' },
+      roomHint: roomName
+    });
 /*
     // Heating sensor — ACTIVE / INACTIVE (binary; heatingPower > 0).
     devices.push({
@@ -469,12 +503,12 @@ function onSync_() {
   // Whole-home actions modeled as SWITCH (OnOff) devices. Unlike SCENE devices,
   // switches reliably show as tiles, appear in the automation action picker,
   // and respond to voice in the current Google Home app.
-  // home/away are stateful (reflect real presence) → willReportState: true.
-  // boost/resume are momentary (no persistent state) → willReportState: false.
-  devices.push(switchDevice_('home',   homeId, 'Set Home',         true));
-  devices.push(switchDevice_('away',   homeId, 'Set Away',         true));
-  devices.push(switchDevice_('boost',  homeId, 'Boost Heating',    false));
-  devices.push(switchDevice_('resume', homeId, 'Resume Schedule',  false));
+  // presence is stateful (on = HOME, off = AWAY) → willReportState: true.
+  // boost/alloff/activate-schedule are momentary (no persistent state) → willReportState: false.
+  devices.push(switchDevice_('presence', homeId, 'Presence',          true));
+  devices.push(switchDevice_('boost',    homeId, 'Boost Heating',     false));
+  devices.push(switchDevice_('alloff',   homeId, 'Heating Off',       false));
+  devices.push(switchDevice_('resume',   homeId, 'Activate Schedule', false));
 
   return {
     agentUserId: props.getProperty(GH.AGENT_USER_ID) || ('tado-' + homeId),
@@ -501,29 +535,21 @@ function onQuery_(payload) {
   var wanted = (payload && payload.devices) || [];
   var tado   = tadoClient_();
 
-  //Logger.log("onQuery");
+  console.log("onQuery");
 
-  // Rooms are cached for 60 s — QUERY is called frequently and getRooms() is
-  // the most expensive call on the critical fulfillment path.
-  var roomsById = getCachedRoomsById_(tado, homeId);
+  // One rooms call, indexed by room id, reused for every requested device.
+  var roomsById = indexRoomsById_(tado.getRooms(homeId) || []);
 
-  // Home presence is fetched lazily and only once — served from cache when
-  // available so no live tado° call is needed on the fulfillment path.
+  // Home presence is fetched lazily and only once — a QUERY that asks about
+  // rooms only should not incur an extra /state call.
   var presence = null, presenceFetched = false;
   function currentPresence_() {
     if (!presenceFetched) {
       presenceFetched = true;
-      var cache = CacheService.getScriptCache();
-      var hit   = cache.get('PRESENCE_' + homeId);
-      if (hit !== null) {
-        presence = hit || null;  // empty string stored when presence was null
-      } else {
-        try {
-          var st = tado.getHomeState(homeId);
-          presence = st && st.presence;
-          try { cache.put('PRESENCE_' + homeId, presence || '', 10); } catch (e) {}
-        } catch (e) { presence = null; }
-      }
+      try {
+        var st = tado.getHomeState(homeId);
+        presence = st && st.presence;   // 'HOME' | 'AWAY'
+      } catch (e) { presence = null; }
     }
     return presence;
   }
@@ -536,8 +562,12 @@ function onQuery_(payload) {
       out[d.id] = room ? roomToQueryState_(room) : { online: false, status: 'ERROR', errorCode: 'deviceNotFound' };
     } else if (parsed.kind === 'openwindow') {
       var room = roomsById[parsed.roomId];
-      var isOpen = !!(room && room.openWindow);
-      out[d.id] = { online: true, status: 'SUCCESS', openPercent: isOpen ? 100 : 0 };
+      // openWindow is non-null when a window is detected (activated or not).
+      out[d.id] = { online: true, status: 'SUCCESS', openPercent: (room && room.openWindow) ? 100 : 0 };
+    } else if (parsed.kind === 'openwindowmode') {
+      var room = roomsById[parsed.roomId];
+      // activated:true means heating is suspended; activated:false means detected but not yet accepted.
+      out[d.id] = { online: true, status: 'SUCCESS', on: !!(room && room.openWindow && room.openWindow.activated) };
     } else if (parsed.kind === 'heating') {
       var room = roomsById[parsed.roomId];
       var pct  = room && room.heatingPower && typeof room.heatingPower.percentage === 'number'
@@ -555,14 +585,11 @@ function onQuery_(payload) {
     } else if (parsed.kind === 'resumeroom') {
       // Momentary switch — always reads back OFF.
       out[d.id] = { online: true, status: 'SUCCESS', on: false };
-    } else if (parsed.kind === 'home' || parsed.kind === 'away') {
-      // Stateful presence switches: reflect the real tado° presence, mutually
-      // exclusive. If presence is unknown, fall back to off.
+    } else if (parsed.kind === 'presence') {
       var p = currentPresence_();
-      var isOn = (parsed.kind === 'home') ? (p === 'HOME') : (p === 'AWAY');
-      out[d.id] = { online: true, status: 'SUCCESS', on: isOn };
+      out[d.id] = { online: true, status: 'SUCCESS', on: p === 'HOME' };
     } else {
-      // boost / resume are momentary actions with no persistent state.
+      // boost / resume / alloff are momentary actions with no persistent state.
       out[d.id] = { online: true, status: 'SUCCESS', on: false };
     }
   });
@@ -675,6 +702,18 @@ function runExecution_(tado, homeId, parsed, exec) {
     throw new Error('Unsupported thermostat command: ' + cmd);
   }
 
+  // --- Per-room open-window mode switch ---
+  if (parsed.kind === 'openwindowmode') {
+    if (cmd === 'action.devices.commands.OnOff') {
+      if (params.on === true) {
+        tado.setOpenWindow(homeId, parsed.roomId);
+      } else {
+        tado.deleteOpenWindow(homeId, parsed.roomId);
+      }
+    }
+    return { on: params.on === true };
+  }
+
   // --- Per-room resume switch ---
   if (parsed.kind === 'resumeroom') {
     if (cmd === 'action.devices.commands.OnOff' && params.on === true) {
@@ -690,14 +729,12 @@ function runExecution_(tado, homeId, parsed, exec) {
     // turning it OFF is a no-op (there is nothing to "un-boost" cleanly, and
     // Home/Away are set via their own switches). We always echo back the
     // requested on-state so Google shows the toggle as accepted.
-    if (on) {
-      switch (parsed.kind) {
-        case 'home':   tado.setPresence(homeId, 'HOME'); break;
-        case 'away':   tado.setPresence(homeId, 'AWAY'); break;
-        case 'boost':  tado.setBoost(homeId);            break;
-        case 'resume': tado.resumeSchedule(homeId);      break;
-        default: throw new Error('Unknown switch: ' + parsed.kind);
-      }
+    switch (parsed.kind) {
+      case 'presence': tado.setPresence(homeId, on ? 'HOME' : 'AWAY'); break;
+      case 'boost':    if (on) tado.setBoost(homeId);                  break;
+      case 'alloff':   if (on) tado.turnAllRoomsOff(homeId);           break;
+      case 'resume':   if (on) tado.resumeSchedule(homeId);            break;
+      default: throw new Error('Unknown switch: ' + parsed.kind);
     }
     return { on: on };
   }
@@ -722,10 +759,11 @@ function onDisconnect_() {
 // ===========================================================================
 // Format:  room-<homeId>-<roomId>           thermostat
 //          openwindow-<homeId>-<roomId>      open-window sensor
+//          openwindowmode-<homeId>-<roomId>   open-window mode switch
 //          heating-<homeId>-<roomId>         heating sensor
 //          humidity-<homeId>-<roomId>        humidity sensor
 //          resumeroom-<homeId>-<roomId>      per-room resume switch
-//          <kind>-<homeId>                   whole-home switches (home/away/boost/resume)
+//          <kind>-<homeId>                   whole-home switches (presence/boost/alloff/resume)
 
 function deviceId_(kind, homeId, roomId) {
   var id = kind + '-' + homeId;
@@ -760,23 +798,6 @@ function indexRoomsById_(rooms) {
   var map = {};
   rooms.forEach(function (r) { map[String(r.id)] = r; });
   return map;
-}
-
-/**
- * Return rooms indexed by id, served from a 60-second script cache.
- * Avoids a tado° API round-trip on every QUERY intent when Google polls
- * multiple devices in quick succession.
- */
-function getCachedRoomsById_(tado, homeId) {
-  var cache = CacheService.getScriptCache();
-  var key   = 'ROOMS_' + homeId;
-  var hit   = cache.get(key);
-  if (hit) {
-    try { return indexRoomsById_(JSON.parse(hit)); } catch (e) { /* fall through */ }
-  }
-  var rooms = tado.getRooms(homeId) || [];
-  try { cache.put(key, JSON.stringify(rooms), 10); } catch (e) { /* cache best-effort */ }
-  return indexRoomsById_(rooms);
 }
 
 /** Clamp a requested setpoint into tado°'s supported heating range. */
@@ -831,33 +852,6 @@ function redirectHtml_(url) {
       '<a href="' + forAttr + '" target="_top">tap here to continue</a>.</p>' +
       '</body></html>')
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
-}
-
-// ===========================================================================
-// Keep-warm trigger
-// ===========================================================================
-
-/**
- * Ping the Web App to keep the V8 runtime warm between Google Home polls.
- *
- * Apps Script cold-starts take 1–3 s. If Google's fulfillment request arrives
- * while the runtime is cold it times out and marks devices as offline/error.
- * Schedule this function on a time-based trigger every 5 minutes.
- *
- * Setup: Apps Script editor → Triggers → Add trigger
- *   Function: keepWarm   Event source: Time-driven   Type: Minutes timer   Every 5 minutes
- */
-function keepWarm() {
-  var url = ScriptApp.getService().getUrl();
-  if (!url) {
-    console.warn('keepWarm: Web App URL not available — is the script deployed as a Web App?');
-    return;
-  }
-  try {
-    UrlFetchApp.fetch(url, { muteHttpExceptions: true });
-  } catch (e) {
-    console.warn('keepWarm: ping failed — ' + e.message);
-  }
 }
 
 // ===========================================================================

@@ -43,7 +43,8 @@ For every tado° X room the integration creates five devices:
 | Device name | Type | Trait | What it does |
 |---|---|---|---|
 | `<Room>` | Thermostat | `TemperatureSetting` | Read/set temperature; modes: `off` / `heat` (manual hold) / `auto` (resume schedule) |
-| `<Room> — Open Window` | Sensor | `OpenClose` | Reports whether open-window mode is active |
+| `<Room> — Open Window` | Sensor | `OpenClose` | Reports whether tado° has detected an open window (temperature drop detection), regardless of whether heating suspension has been accepted |
+| `<Room> — Open Window Mode` | Switch | `OnOff` | Stateful — on = heating suspended; off = normal. Turning on activates open-window mode (suspends heating); turning off clears it |
 | `<Room> — Heating` | Sensor | `SensorState` | Reports ACTIVE / INACTIVE based on heating power |
 | `<Room> — Humidity` | Sensor | `HumiditySetting` | Reports ambient humidity percentage |
 | `Resume <Room>` | Switch | `OnOff` | Momentary — turning ON resumes the tado° schedule for that room |
@@ -52,14 +53,14 @@ Plus four whole-home devices:
 
 | Device name | Type | What it does |
 |---|---|---|
-| `Set Home` | Switch | Sets presence to HOME (manual lock) |
-| `Set Away` | Switch | Sets presence to AWAY (manual lock) |
+| `Presence` | Switch | on = HOME, off = AWAY. State always reflects real tado° presence. Toggling sets the presence lock accordingly |
 | `Boost Heating` | Switch | Activates boost mode for all rooms |
-| `Resume Schedule` | Switch | Resumes schedule for all rooms |
+| `Heating Off` | Switch | Turns off all rooms with a manual hold. Use `Activate Schedule` to restore heating |
+| `Activate Schedule` | Switch | Immediately activates the tado° schedule for all rooms, clearing all manual overrides |
+
+Per-room `Resume <Room>` switches hand back to the schedule at the **next block boundary** (keeping the current temperature until then). `Activate Schedule` acts **immediately** across all rooms.
 
 **State reporting** — devices marked `willReportState: true` (thermostats, sensors, Set Home, Set Away) push live state to HomeGraph via `apiReportStateAndNotification()`. Momentary switches (boost, resume, per-room resume) are polled on demand.
-
-**Caching** — `apiReportStateAndNotification()` pre-populates a 6-minute `CacheService` cache with the latest rooms and presence data. Google Home QUERY intents served within that window make zero tado° API calls, keeping fulfillment latency well within Google's timeout.
 
 ---
 
@@ -132,14 +133,9 @@ Create a **Cloud-to-cloud** integration:
 
 In the Google Home app, add the `[test]` integration and link the account. Your rooms and devices will appear.
 
-### 6. Set up proactive state reporting and keep-warm (recommended)
+### 6. Set up proactive state reporting (recommended)
 
-Create two **time-based triggers** in Apps Script:
-
-| Function | Interval | Purpose |
-|---|---|---|
-| `apiReportStateAndNotification` | Every 5 minutes | Push current device state to HomeGraph so Google Home stays in sync |
-| `keepWarm` | Every 5 minutes | Ping the Web App to prevent cold-start timeouts on Google Home QUERY requests |
+Create a **time-based trigger** in Apps Script on `apiReportStateAndNotification()` — every 5 minutes is a good interval. This keeps Google Home in sync without waiting for a poll.
 
 If rooms are added or removed in tado°, or after any deployment that changes the device list, run `apiRequestSync()` manually (or trigger it) to ask Google to re-run SYNC and re-discover all devices.
 
@@ -177,7 +173,6 @@ Run these directly from the Apps Script editor to validate without Google Home:
 | `test_sync()` | Logs the full SYNC payload |
 | `test_query()` | Logs QUERY state for every thermostat room |
 | `test_executeSetpoint()` | Sets the first room to 21 °C via the EXECUTE path (live write) |
-| `keepWarm()` | Pings the Web App to warm the runtime (normally run via trigger) |
 | `apiQuery()` | Queries HomeGraph for current device states |
 | `apiReportStateAndNotification()` | Pushes current state to HomeGraph immediately |
 

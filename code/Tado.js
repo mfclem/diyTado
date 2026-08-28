@@ -520,6 +520,20 @@ var Tado = (function () {
   };
 
   /**
+   * Turn off heating in every room of the home. There is no single API
+   * endpoint for this, so rooms are fetched and turned off individually.
+   * Each room gets a MANUAL termination — heating stays off until explicitly
+   * resumed (e.g. via resumeSchedule or setRoomTemperature).
+   */
+  TadoClient.prototype.turnAllRoomsOff = function (homeId) {
+    var self  = this;
+    var rooms = this.getRooms(homeId) || [];
+    rooms.forEach(function (room) {
+      self.turnRoomOff(homeId, room.id, { type: 'MANUAL' });
+    });
+  };
+
+  /**
    * Resume the tado°X schedule for a single room by applying a
    * NEXT_TIME_BLOCK termination to the current setting. The room reverts to
    * its scheduled setpoint at the next block boundary.

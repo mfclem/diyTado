@@ -1,22 +1,26 @@
 metadata:
-  name: Home and away - Tado
-  description: Turn on Set Home when I come home and turn on Set Away when I'm not at home.
+  name: Maison / Absent - Tado
+  description: Active Presence Tado lorsque je rentre à la maison et le désactive lorsque je suis absent.
+
 automations:
-  - starters:
+  - name: Maison
+    starters:
       - type: home.state.HomePresence
         state: HomePresenceMode
         is: HOME
     actions:
       - type: device.command.OnOff
         devices:
-          - Set Home - Chauffage
+          - Presence - Chauffage
         on: true
-  - starters:
+
+  - name: Absent
+    starters:
       - type: home.state.HomePresence
         state: HomePresenceMode
         is: AWAY
     actions:
       - type: device.command.OnOff
         devices:
-          - Set Away - Chauffage
-        on: true
+          - Presence - Chauffage
+        on: false
