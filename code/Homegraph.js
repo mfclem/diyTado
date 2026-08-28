@@ -193,6 +193,9 @@ function callHomeGraphApi(endpoint, method, payload) {
  * ==========================================
  */
 
+/**
+ * Requests Google to send an action.devices.SYNC intent to the smart home Action to update device metadata for the given user.
+ */
 function apiRequestSync() {
   return callHomeGraphApi('devices:requestSync', 'post', {
     agentUserId: AGENT_USER_ID,
@@ -200,6 +203,9 @@ function apiRequestSync() {
   });
 }
 
+/**
+ * Reports device state and optionally sends device notifications.
+ */
 function apiReportStateAndNotification() {
   return callHomeGraphApi('devices:reportStateAndNotification', 'post', {
     requestId: Utilities.getUuid(),
@@ -210,6 +216,9 @@ function apiReportStateAndNotification() {
   });
 }
 
+/**
+ * Gets all the devices associated with the given third-party user.
+ */
 function apiSync() {
   return callHomeGraphApi('devices:sync', 'post', {
     requestId: Utilities.getUuid(),
@@ -217,6 +226,9 @@ function apiSync() {
   });
 }
 
+/**
+ * Gets the current states in Home Graph for the given set of the third-party user's devices.
+ */
 function apiQuery() {
   return callHomeGraphApi('devices:query', 'post', {
     requestId: Utilities.getUuid(),
@@ -229,6 +241,9 @@ function apiQuery() {
   });
 }
 
+/**
+ * Unlinks the given third-party user from your smart home Action.
+ */
 function apiDeleteAgentUser() {
   return callHomeGraphApi('agentUsers/' + encodeURIComponent(AGENT_USER_ID), 'delete', null);
 }
