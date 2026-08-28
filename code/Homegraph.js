@@ -371,7 +371,6 @@ function generateStatesAndNotifications(devices) {
       // Stateful presence switch — on = HOME, off = AWAY.
       // var p = currentPresence_();
       // states[d.id] = { online: true, on: p === 'HOME' };
-
     }
     // boost / resume (whole-home) / alloff are momentary (willReportState: false) — excluded.
   });
