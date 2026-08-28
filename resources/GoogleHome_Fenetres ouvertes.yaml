@@ -1,0 +1,28 @@
+metadata:
+  name: Fenêtres ouvertes - Tado
+  description: Active le mode open window Tado dans le Séjour / la Chambre quand une fenêtre est ouverte pour y couper le chauffage
+
+automations:
+  - name: Fenêtre Séjour ouverte (chauffage Séjour off)
+    starters:
+      - type: device.state.OpenClose
+        device: Séjour open window - Séjour
+        state: openPercent
+        is: 100
+    actions:
+      - type: device.command.OnOff
+        devices:
+          - Séjour open window mode - Séjour
+        on: true
+
+  - name: Fenêtre Chambre ouverte (chauffage Chambre off)
+    starters:
+      - type: device.state.OpenClose
+        device: Chambre open window - Chambre
+        state: openPercent
+        is: 100
+    actions:
+      - type: device.command.OnOff
+        devices:
+          - Chambre open window mode - Chambre
+        on: true

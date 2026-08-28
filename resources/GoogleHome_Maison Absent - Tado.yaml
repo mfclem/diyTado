@@ -1,6 +1,6 @@
 metadata:
   name: Maison / Absent - Tado
-  description: Active Presence Tado lorsque je rentre à la maison et le désactive lorsque je suis absent.
+  description: Active Presence Tado (Home) lorsque je rentre à la maison et le désactive (Away) lorsque je suis absent
 
 automations:
   - name: Maison
