@@ -7,7 +7,7 @@ metadata:
 # - Si Jour on, Alors mettre Nuit off
 # - Si Nuit on, Alors mettre Jour off
 # - De jour, Si Auto on et Jour off, Alors mettre Jour on
-# - De nuit, Si Auto on et Nuit off, alors mettre Nuit on
+# - De nuit, Si Auto on et Nuit off, Alors mettre Nuit on
 # - Si Boost on et Auto off et Jour off et Nuit off, Alors mettre Boost off
 
 automations:
