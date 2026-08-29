@@ -296,8 +296,11 @@ function generateStatesAndNotifications(devices) {
         var setting = room.setting || {};
         var isOn    = setting.power === 'ON';
         var online  = !room.connection || room.connection.state === 'CONNECTED';
-        var hasManualOverride = !!(room.manualControlTermination);
-        var mode    = isOn ? (hasManualOverride ? 'heat' : 'auto') : 'off';
+        // auto = no override, or NEXT_TIME_BLOCK (schedule is or will soon be in control).
+        // heat = MANUAL or TIMER hold (explicit indefinite or timed override).
+        // off  = power OFF.
+        var termType = room.manualControlTermination && room.manualControlTermination.type;
+        var mode    = isOn ? (termType === 'MANUAL' || termType === 'TIMER' ? 'heat' : 'auto') : 'off';
 
         var state = {
           online: online,
@@ -353,7 +356,7 @@ function generateStatesAndNotifications(devices) {
         var sensor = room.sensorDataPoints || {};
         states[d.id] = {
           online: true,
-          humidityAmbientPercent: sensor.humidity ? sensor.humidity.percentage : null
+          humidityAmbientPercent: sensor.humidity ? sensor.humidity.percentage : 0
         };
       }
 

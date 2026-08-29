@@ -590,9 +590,6 @@ function onQuery_(payload) {
                    ? room.sensorDataPoints.humidity.percentage : 0;
       out[d.id] = { online: true, status: 'SUCCESS', humidityAmbientPercent: pct };
     } else if (parsed.kind === 'resumeroom') {
-      // Momentary switch — always reads back OFF.
-      out[d.id] = { online: true, status: 'SUCCESS', on: false };
-    } else if (parsed.kind === 'resumeroom') {
       var room = roomsById[parsed.roomId];
       var termination = room && room.manualControlTermination;
       out[d.id] = { online: true, status: 'SUCCESS', on: !!(termination && termination.type === 'NEXT_TIME_BLOCK') };
@@ -615,11 +612,11 @@ function roomToQueryState_(room) {
   var isOn    = setting.power === 'ON';
   var online  = !room.connection || room.connection.state === 'CONNECTED';
 
-  // 'auto' when the schedule is running freely (no manual override active).
-  // 'heat' when a manual override is holding a temperature.
-  // 'off'  when power is OFF.
-  var hasManualOverride = !!(room.manualControlTermination);
-  var mode = isOn ? (hasManualOverride ? 'heat' : 'auto') : 'off';
+  // auto = no override, or NEXT_TIME_BLOCK (schedule is or will soon be in control).
+  // heat = MANUAL or TIMER hold (explicit indefinite or timed override).
+  // off  = power OFF.
+  var termType = room.manualControlTermination && room.manualControlTermination.type;
+  var mode = isOn ? (termType === 'MANUAL' || termType === 'TIMER' ? 'heat' : 'auto') : 'off';
 
   var state = {
     online: online,
