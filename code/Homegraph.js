@@ -84,7 +84,8 @@
  * 4. Optionally (if not yet available) run setupGoogleHomeAction() and authorizeTado() in GoogleHomeAction.js
  *    so that GH_AGENT_USER_ID, GH_HOME_ID, and TADO_TOKENS are populated.
  * 5. Create a time-based trigger on apiReportStateAndNotification()
- *    (e.g. every 5 minutes) so Google Home stays in sync automatically.
+ *    set to Every minute — the function self-throttles to run every 3 minutes
+ *    using a timestamp stored in Script Properties (REPORT_STATE_LAST_RUN).
  */
 
 /**
@@ -208,8 +209,26 @@ function apiRequestSync() {
 
 /**
  * Reports device state and optionally sends device notifications.
+ *
+ * Designed to be triggered every 1 minute. Skips execution unless at least
+ * 3 minutes have elapsed since the last run, effectively firing every 3 minutes
+ * while using the finest available Apps Script trigger granularity (1 minute).
+ *
+ * Setup: Apps Script editor → Triggers → Add trigger
+ *   Function: apiReportStateAndNotification
+ *   Event source: Time-driven   Type: Minutes timer   Every minute
  */
+var REPORT_STATE_INTERVAL_MS  = 3 * 60 * 1000;
+var REPORT_STATE_LAST_RUN_KEY = 'REPORT_STATE_LAST_RUN';
+
 function apiReportStateAndNotification() {
+  var props   = PropertiesService.getScriptProperties();
+  var lastRun = parseInt(props.getProperty(REPORT_STATE_LAST_RUN_KEY) || '0', 10);
+  var now     = Date.now();
+
+  if (now - lastRun < REPORT_STATE_INTERVAL_MS) return null;  // too soon, skip
+
+  props.setProperty(REPORT_STATE_LAST_RUN_KEY, String(now));
   return callHomeGraphApi('devices:reportStateAndNotification', 'post', {
     requestId: Utilities.getUuid(),
     agentUserId: AGENT_USER_ID,
@@ -268,11 +287,12 @@ function generateStatesAndNotifications(devices) {
   var homeId = requireHomeId_();
   var tado   = tadoClient_();
 
-  // One rooms call, indexed by room id, reused for every requested device.
+  // Fetch rooms and write to cache
   var rooms = tado.getRooms(homeId) || [];
+  try { CacheService.getScriptCache().put('ROOMS_' + homeId, JSON.stringify(rooms), 300); } catch (e) {}
   var roomsById = indexRoomsById_(rooms);
 
-  // Presence is fetched lazily once — only if presence switch is in the device list.
+  // Presence is fetched lazily once and written to cache
   var presence = null, presenceFetched = false;
   function currentPresence_() {
     if (!presenceFetched) {
@@ -280,6 +300,7 @@ function generateStatesAndNotifications(devices) {
       try {
         var st = tado.getHomeState(homeId);
         presence = st && st.presence;  // 'HOME' | 'AWAY'
+        try { CacheService.getScriptCache().put('PRESENCE_' + homeId, presence || '', 300); } catch (e) {}
       } catch (e) { presence = null; }
     }
     return presence;

@@ -135,7 +135,7 @@ In the Google Home app, add the `[test]` integration and link the account. Your 
 
 ### 6. Set up proactive state reporting (recommended)
 
-Create a **time-based trigger** in Apps Script on `apiReportStateAndNotification()` — every 5 minutes is a good interval. This keeps Google Home in sync without waiting for a poll.
+Create a **time-based trigger** in Apps Script on `apiReportStateAndNotification()` set to **Every minute** — the function self-throttles to execute every 3 minutes using a timestamp stored in the `REPORT_STATE_LAST_RUN` Script Property.
 
 If rooms are added or removed in tado°, or after any deployment that changes the device list, run `apiRequestSync()` manually (or trigger it) to ask Google to re-run SYNC and re-discover all devices.
 

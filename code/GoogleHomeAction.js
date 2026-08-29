@@ -542,21 +542,29 @@ function onQuery_(payload) {
   var wanted = (payload && payload.devices) || [];
   var tado   = tadoClient_();
 
-  console.log("onQuery");
+  //Logger.log("onQuery");
 
   // One rooms call, indexed by room id, reused for every requested device.
   var roomsById = indexRoomsById_(tado.getRooms(homeId) || []);
 
-  // Home presence is fetched lazily and only once — a QUERY that asks about
-  // rooms only should not incur an extra /state call.
+  // Home presence is fetched lazily and only once per request — served from a
+  // short-lived cache so repeated QUERY calls don't each hit tado° live.
   var presence = null, presenceFetched = false;
   function currentPresence_() {
     if (!presenceFetched) {
       presenceFetched = true;
+      var cache = CacheService.getScriptCache();
+      var key   = 'PRESENCE_' + homeId;
+      var hit   = cache.get(key);
+      if (hit !== null) {
+        presence = hit || null;
+      } else {
       try {
         var st = tado.getHomeState(homeId);
-        presence = st && st.presence;   // 'HOME' | 'AWAY'
+          presence = st && st.presence;
+          try { cache.put(key, presence || '', 300); } catch (e) {}
       } catch (e) { presence = null; }
+      }
     }
     return presence;
   }
@@ -743,9 +751,8 @@ function runExecution_(tado, homeId, parsed, exec) {
         }
       }
     }
-    var room = indexRoomsById_(tado.getRooms(homeId) || [])[parsed.roomId] || {};
-    var termination = room.manualControlTermination;
-    return { on: !!(termination && termination.type === 'NEXT_TIME_BLOCK') };
+    // Return inferred state — avoids a second getRooms() call to confirm.
+    return { on: params.on === true };
   }
 
   // --- Whole-home switches (OnOff) ---
