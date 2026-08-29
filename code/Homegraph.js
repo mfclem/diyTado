@@ -218,7 +218,7 @@ function apiRequestSync() {
  *   Function: apiReportStateAndNotification
  *   Event source: Time-driven   Type: Minutes timer   Every minute
  */
-var REPORT_STATE_INTERVAL_MS  = 3 * 60 * 1000;
+var REPORT_STATE_INTERVAL_MS  = 2.5 * 60 * 1000;
 var REPORT_STATE_LAST_RUN_KEY = 'REPORT_STATE_LAST_RUN';
 
 function apiReportStateAndNotification() {
