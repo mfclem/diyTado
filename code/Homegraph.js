@@ -405,3 +405,106 @@ function generateStatesAndNotifications(devices) {
   console.log("States and Notifications: " + JSON.stringify(statesAndNotifications, null, 2));
   return statesAndNotifications;
 }
+
+/**
+ * Compute air comfort levels locally, replicating tado°'s airComfort endpoint
+ * without requiring a paid subscription.
+ *
+ * @param {Array}  rooms                Array of room objects as returned by getRooms().
+ * @param {number} temperatureOutdoorAvg Mean outdoor temperature in °C (e.g. from getWeather()).
+ * @param {number|null} lastOpenWindow   Timestamp (ms) of the last open-window event, or null.
+ *
+ * @return {{
+ *   freshness: { value: 'FRESH'|'FAIR'|'STUFFY' },
+ *   comfort: Array<{
+ *     roomId: number,
+ *     temperatureLevel: 'COLD'|'COOL'|'COMFY'|'WARM'|'HOT',
+ *     humidityLevel: 'DRY'|'COMFY'|'HUMID'
+ *   }>
+ * }}
+ *
+ * ALGORITHMS
+ * ----------
+ * humidityLevel — Dew Point (Magnus-Tetens approximation):
+ *   Td = (243.04 × (ln(RH/100) + 17.625×T/(243.04+T)))
+ *        / (17.625 - (ln(RH/100) + 17.625×T/(243.04+T)))
+ *   Td < 12.8°C  → DRY
+ *   Td 12.8–15.5°C → COMFY
+ *   Td > 15.5°C  → HUMID
+ *
+ * temperatureLevel — ASHRAE 55 Adaptive Comfort Model:
+ *   T_opt = 0.31 × T_out + 17.8   (optimal indoor temperature)
+ *   Comfort band ≈ ±3.5°C (80% acceptability)
+ *   T < T_opt - 3.5              → COLD
+ *   T_opt - 3.5 ≤ T < T_opt - 2 → COOL
+ *   T_opt - 2   ≤ T ≤ T_opt + 2 → COMFY
+ *   T_opt + 2   < T ≤ T_opt + 3.5 → WARM
+ *   T > T_opt + 3.5              → HOT
+ *
+ * airFreshness — time since last open window:
+ *   < 4 h  → FRESH
+ *   4–8 h  → FAIR
+ *   > 8 h  → STUFFY
+ *   null / not provided → FAIR
+ */
+function computeAirComfort(rooms, temperatureOutdoorAvg, lastOpenWindow) {
+
+  // --- airFreshness -----------------------------------------------------------
+  var freshnessValue;
+  if (lastOpenWindow) {
+    var elapsedHours = (Date.now() - lastOpenWindow) / (1000 * 60 * 60);
+    if (elapsedHours < 4) {
+      freshnessValue = 'FRESH';
+    } else if (elapsedHours <= 8) {
+      freshnessValue = 'FAIR';
+    } else {
+      freshnessValue = 'STUFFY';
+    }
+  } else {
+    freshnessValue = 'FAIR';
+  }
+
+  // --- ASHRAE 55 optimal indoor temperature -----------------------------------
+  var tOpt = 0.31 * temperatureOutdoorAvg + 17.8;
+
+  // --- Per-room comfort -------------------------------------------------------
+  var comfort = (rooms || []).map(function (room) {
+    var sensor   = room.sensorDataPoints || {};
+    var tempData = sensor.insideTemperature || {};
+    var humData  = sensor.humidity || {};
+    var t        = typeof tempData.value === 'number' ? tempData.value : null;
+    var rh       = typeof humData.percentage === 'number' ? humData.percentage : null;
+
+    // temperatureLevel
+    var temperatureLevel = 'COMFY';
+    if (t !== null) {
+      if      (t < tOpt - 3.5) temperatureLevel = 'COLD';
+      else if (t < tOpt - 2)   temperatureLevel = 'COOL';
+      else if (t <= tOpt + 2)  temperatureLevel = 'COMFY';
+      else if (t <= tOpt + 3.5) temperatureLevel = 'WARM';
+      else                      temperatureLevel = 'HOT';
+    }
+
+    // humidityLevel — Magnus-Tetens dew point
+    var humidityLevel = 'COMFY';
+    if (t !== null && rh !== null && rh > 0) {
+      var lnRH = Math.log(rh / 100);
+      var gamma = lnRH + (17.625 * t) / (243.04 + t);
+      var dewPoint = (243.04 * gamma) / (17.625 - gamma);
+      if      (dewPoint < 12.8) humidityLevel = 'DRY';
+      else if (dewPoint <= 15.5) humidityLevel = 'COMFY';
+      else                       humidityLevel = 'HUMID';
+    }
+
+    return {
+      roomId:           room.id,
+      temperatureLevel: temperatureLevel,
+      humidityLevel:    humidityLevel
+    };
+  });
+
+  return {
+    freshness: { value: freshnessValue },
+    comfort:   comfort
+  };
+}
