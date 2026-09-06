@@ -58,29 +58,53 @@
  */
 
 
-var REPORT_STATE_INTERVAL_MS  = 2.5 * 60 * 1000;
-var REPORT_STATE_LAST_RUN_KEY = 'REPORT_STATE_LAST_RUN';
+const REPORT_STATE_INTERVAL_SEC  = 2.5 * 60;
+const REPORT_STATE_LAST_RUN_KEY = 'REPORT_STATE_LAST_RUN';
+
 
 function reportState() {
   var props   = PropertiesService.getScriptProperties();
   var lastRun = parseInt(props.getProperty(REPORT_STATE_LAST_RUN_KEY) || '0', 10);
   var now     = Date.now();
-
-  if (now - lastRun < REPORT_STATE_INTERVAL_MS) return null;  // too soon, skip
-
+  
+  if (now - lastRun < (REPORT_STATE_INTERVAL_SEC * 1000)) return null;  // too soon, skip
+  
   props.setProperty(REPORT_STATE_LAST_RUN_KEY, String(now));
-  return apiReportStateAndNotification(generateStatesAndNotifications_(getSyncDevicesIds_()));
+
+  var homeId = requireHomeId_();
+
+  return apiReportStateAndNotification(generateStatesAndNotifications_(homeId, getSyncDevicesIds_()));
 }
 
 
 
-function generateStatesAndNotifications_(devices) {
-  var homeId = requireHomeId_();
-  var tado   = tadoClient_();
+function getCacheRooms_(homeId) {
+  var rooms = null;
+  var cache = CacheService.getScriptCache();
+  var key   = 'ROOMS_' + homeId;
+  var hit   = cache.get(key);
+  if (hit !== null) {
+    rooms = hit || null;
+  } else {
+    try {
+      var tado   = tadoClient_();
+      rooms = tado.getRooms(homeId);
+      try { cache.put(key, JSON.stringify(rooms), REPORT_STATE_INTERVAL_SEC); } catch (e) {}
+    } catch (e) { rooms = null; }
+  }
+  return rooms;
+}
 
-  // Fetch rooms and write to cache
-  var rooms = tado.getRooms(homeId) || [];
-  try { CacheService.getScriptCache().put('ROOMS_' + homeId, JSON.stringify(rooms), 300); } catch (e) {}
+
+
+function generateStatesAndNotifications_(homeId, devices) {
+  // var homeId = requireHomeId_();
+  // var tado   = tadoClient_();
+  // // Fetch rooms and write to cache
+  // var rooms = tado.getRooms(homeId) || [];
+  // try { CacheService.getScriptCache().put('ROOMS_' + homeId, JSON.stringify(rooms), 300); } catch (e) {}
+  var rooms = getCacheRooms_(homeId, tado) || [];
+
   var roomsById = indexRoomsById_(rooms);
 
   // Presence is fetched lazily once and written to cache
