@@ -78,25 +78,6 @@ function reportState() {
 
 
 
-function getCacheRooms_(homeId) {
-  var rooms = null;
-  var cache = CacheService.getScriptCache();
-  var key   = 'ROOMS_' + homeId;
-  var hit   = cache.get(key);
-  if (hit !== null) {
-    rooms = hit || null;
-  } else {
-    try {
-      var tado = tadoClient_();
-      rooms = tado.getRooms(homeId);
-      try { cache.put(key, JSON.stringify(rooms), REPORT_STATE_INTERVAL_SEC); } catch (e) {}
-    } catch (e) { rooms = null; }
-  }
-  return rooms;
-}
-
-
-
 function generateStatesAndNotifications_(homeId, devices) {
   // var homeId = requireHomeId_();
   // var tado   = tadoClient_();
@@ -251,9 +232,9 @@ function generateStatesAndNotifications_(homeId, devices) {
  *   T_opt = 0.31 × T_out + 17.8   (optimal indoor temperature)
  *   Comfort band ≈ ±3.5°C (80% acceptability)
  *   T < T_opt - 3.5              → COLD
- *   T_opt - 3.5 ≤ T < T_opt - 2 → COOL
- *   T_opt - 2   ≤ T ≤ T_opt + 2 → COMFY
- *   T_opt + 2   < T ≤ T_opt + 3.5 → WARM
+ *   T_opt - 3.5 ≤ T < T_opt - 2.5 → COOL
+ *   T_opt - 2.5  ≤ T ≤ T_opt + 2.5 → COMFY
+ *   T_opt + 2.5  < T ≤ T_opt + 3.5 → WARM
  *   T > T_opt + 3.5              → HOT
  *
  * airFreshness — time since last open window:
@@ -293,12 +274,12 @@ function computeAirComfort_(rooms, temperatureOutdoorAvg, lastOpenWindow) {
     // temperatureLevel
     var temperatureLevel = 'COMFY';
     if (t !== null) {
-      if      (t < tOpt - 3.5) temperatureLevel = 'COLD';
-      else if (t < tOpt - 2)   temperatureLevel = 'COOL';
-      else if (t <= tOpt + 2)  temperatureLevel = 'COMFY';
+      if      (t < tOpt - 3.5)  temperatureLevel = 'COLD';
+      else if (t < tOpt - 2.5)  temperatureLevel = 'COOL';
+      else if (t <= tOpt + 2.5) temperatureLevel = 'COMFY';
       else if (t <= tOpt + 3.5) temperatureLevel = 'WARM';
-      else                      temperatureLevel = 'HOT';
-    }
+      else                       temperatureLevel = 'HOT';
+      }
 
     // humidityLevel — Magnus-Tetens dew point
     var humidityLevel = 'COMFY';
@@ -322,4 +303,89 @@ function computeAirComfort_(rooms, temperatureOutdoorAvg, lastOpenWindow) {
     freshness: { value: freshnessValue },
     comfort:   comfort
   };
+}
+
+
+/**
+ * Return the rolling 24-hour mean outdoor temperature (°C), updating the
+ * stored reading list with the current weather value if available.
+ *
+ * Readings are stored as a JSON array of { t: timestamp_ms, v: celsius }
+ * in Script Property OUTDOOR_TEMP_READINGS. On each call:
+ *   1. The current outdoor temperature (from getCacheWeather_) is appended.
+ *   2. Readings older than 24 hours are dropped.
+ *   3. The mean of remaining readings is returned.
+ *
+ * With a 30-minute weather cache TTL, up to 48 readings accumulate — small
+ * enough to fit comfortably within the 9 KB Script Property limit.
+ *
+ * @param  {string} homeId
+ * @param  {number|null} currentOutdoorTemp  Current outdoor temperature in °C,
+ *         or null to skip appending (just compute mean from stored readings).
+ * @return {number|null}  Mean temperature, or null if no readings available.
+ */
+var OUTDOOR_TEMP_READINGS_KEY = 'OUTDOOR_TEMP_READINGS';
+var OUTDOOR_TEMP_WINDOW_MS    = 24 * 60 * 60 * 1000;  // 24 hours
+
+function getOutdoorTempAvg_(homeId, currentOutdoorTemp) {
+  var props    = PropertiesService.getScriptProperties();
+  var key      = OUTDOOR_TEMP_READINGS_KEY + '_' + homeId;
+  var now      = Date.now();
+  var readings = [];
+
+  try {
+    var raw = props.getProperty(key);
+    if (raw) readings = JSON.parse(raw);
+  } catch (e) { readings = []; }
+
+  // Append current reading if provided.
+  if (typeof currentOutdoorTemp === 'number' && !isNaN(currentOutdoorTemp)) {
+    readings.push({ t: now, v: currentOutdoorTemp });
+  }
+
+  // Drop readings older than 24 hours.
+  var cutoff = now - OUTDOOR_TEMP_WINDOW_MS;
+  readings = readings.filter(function (r) { return r.t >= cutoff; });
+
+  // Persist updated list.
+  try { props.setProperty(key, JSON.stringify(readings)); } catch (e) {}
+
+  if (!readings.length) return null;
+  var sum = readings.reduce(function (acc, r) { return acc + r.v; }, 0);
+  return sum / readings.length;
+}
+
+
+function getCacheRooms_(homeId) {
+  var rooms = null;
+  var cache = CacheService.getScriptCache();
+  var key   = 'ROOMS_' + homeId;
+  var hit   = cache.get(key);
+  if (hit !== null) {
+    try { rooms = JSON.parse(hit); } catch (e) { rooms = null; }
+  } else {
+    try {
+      var tado = tadoClient_();
+      rooms = tado.getRooms(homeId);
+      try { cache.put(key, JSON.stringify(rooms), REPORT_STATE_INTERVAL_SEC); } catch (e) {}
+    } catch (e) { rooms = null; }
+  }
+  return rooms;
+}
+
+function getCacheWeather_(homeId) {
+  var weather = null;
+  var cache   = CacheService.getScriptCache();
+  var key     = 'WEATHER_' + homeId;
+  var hit     = cache.get(key);
+  if (hit !== null) {
+    try { weather = JSON.parse(hit); } catch (e) { weather = null; }
+  } else {
+    try {
+      var tado = tadoClient_();
+      weather = tado.getWeather(homeId);
+      try { cache.put(key, JSON.stringify(weather), 29 * 60); } catch (e) {}
+    } catch (e) { weather = null; }
+  }
+  return weather;
 }
