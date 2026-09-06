@@ -103,7 +103,7 @@ function generateStatesAndNotifications_(homeId, devices) {
   // // Fetch rooms and write to cache
   // var rooms = tado.getRooms(homeId) || [];
   // try { CacheService.getScriptCache().put('ROOMS_' + homeId, JSON.stringify(rooms), 300); } catch (e) {}
-  var rooms = getCacheRooms_(homeId, tado) || [];
+  var rooms = getCacheRooms_(homeId) || [];
 
   var roomsById = indexRoomsById_(rooms);
 
