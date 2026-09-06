@@ -173,7 +173,7 @@ function apiRequestSync() {
 /**
  * Reports device state and optionally sends device notifications.
  */
-function apiReportStateAndNotification(var statesAndNotifications) {
+function apiReportStateAndNotification(statesAndNotifications) {
   return callHomeGraphApi('devices:reportStateAndNotification', 'post', {
     requestId: Utilities.getUuid(),
     agentUserId: AGENT_USER_ID,
