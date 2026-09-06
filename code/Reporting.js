@@ -87,7 +87,7 @@ function getCacheRooms_(homeId) {
     rooms = hit || null;
   } else {
     try {
-      var tado   = tadoClient_();
+      var tado = tadoClient_();
       rooms = tado.getRooms(homeId);
       try { cache.put(key, JSON.stringify(rooms), REPORT_STATE_INTERVAL_SEC); } catch (e) {}
     } catch (e) { rooms = null; }
