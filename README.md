@@ -76,6 +76,7 @@ Set all of the following in the Apps Script project under **Project Settings →
 | `SERVICE_ACCOUNT_PRIVATE_KEY` | RSA private key from the service account JSON key file. Paste the full `-----BEGIN PRIVATE KEY-----…` block with literal `\n` for newlines |
 | `SPREADSHEET` | ID of the Google Spreadsheet used by BetterLog for execution logs |
 | `GEMINI_API_KEY` | Gemini API key (only required if using `getThermostatsStates()` in `Main.js`) |
+| `CALENDAR_NOTIFICATION_ID` | ID of a dedicated Google Calendar used for air comfort push notifications. Create a calendar named e.g. "Home Notifications", set its default reminder to 0 minutes, copy its ID here |
 
 The following properties are written automatically by the setup functions below:
 

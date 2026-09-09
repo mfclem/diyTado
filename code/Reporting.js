@@ -59,19 +59,23 @@
 
 
 const REPORT_STATE_INTERVAL_SEC  = 2.5 * 60;
-const REPORT_STATE_LAST_RUN_KEY = 'REPORT_STATE_LAST_RUN';
-
+const REPORT_STATE_LAST_RUN_KEY  = 'REPORT_STATE_LAST_RUN';
+const NOTIF_COOLDOWN_MS          = 60 * 60 * 1000;  // 1 hour between repeat alerts
+const NOTIF_LAST_KEY_PREFIX      = 'NOTIF_LAST_';   // + homeId_roomId_condition
 
 function reportState() {
   var props   = PropertiesService.getScriptProperties();
   var lastRun = parseInt(props.getProperty(REPORT_STATE_LAST_RUN_KEY) || '0', 10);
   var now     = Date.now();
-  
+
   if (now - lastRun < (REPORT_STATE_INTERVAL_SEC * 1000)) return null;  // too soon, skip
-  
+
   props.setProperty(REPORT_STATE_LAST_RUN_KEY, String(now));
 
   var homeId = requireHomeId_();
+
+  // Run air comfort check alongside state reporting.
+  // checkAirComfortAlerts_(homeId);
 
   return apiReportStateAndNotification(generateStatesAndNotifications_(homeId, getSyncDevicesIds_()));
 }
@@ -388,4 +392,104 @@ function getCacheWeather_(homeId) {
     } catch (e) { weather = null; }
   }
   return weather;
+}
+
+/**
+ * Compute air comfort for all rooms and send a single Calendar notification
+ * if any alert-worthy condition is detected, subject to per-condition cooldown.
+ *
+ * Alert conditions:
+ *   temperatureLevel : COLD or HOT
+ *   humidityLevel    : HUMID
+ *   freshness        : STUFFY
+ *
+ * Cooldown: NOTIF_COOLDOWN_MS (1 hour) per condition per room, stored in
+ * Script Properties under NOTIF_LAST_<homeId>_<roomId>_<condition>.
+ */
+function checkAirComfortAlerts_(homeId) {
+  var rooms   = getCacheRooms_(homeId);
+  if (!rooms || !rooms.length) return;
+
+  var weather     = getCacheWeather_(homeId);
+  var outdoorTemp = weather && weather.outsideTemperature
+                      ? weather.outsideTemperature.celsius : null;
+  var tempAvg     = getOutdoorTempAvg_(homeId, outdoorTemp);
+  if (tempAvg === null) return;  // not enough data yet for ASHRAE model
+
+  var comfort     = computeAirComfort_(rooms, tempAvg, null);
+  var roomsById   = indexRoomsById_(rooms);
+  var props       = PropertiesService.getScriptProperties();
+  var now         = Date.now();
+  var alerts      = [];
+
+  // Check per-room conditions.
+  comfort.comfort.forEach(function (r) {
+    var roomName = roomsById[String(r.roomId)]
+                     ? roomsById[String(r.roomId)].name
+                     : 'Room ' + r.roomId;
+
+    var conditions = [];
+    if (r.temperatureLevel === 'COLD' || r.temperatureLevel === 'HOT') {
+      conditions.push(r.temperatureLevel);
+    }
+    if (r.humidityLevel === 'HUMID') {
+      conditions.push('HUMID');
+    }
+
+    conditions.forEach(function (cond) {
+      var key     = NOTIF_LAST_KEY_PREFIX + homeId + '_' + r.roomId + '_' + cond;
+      var lastStr = props.getProperty(key);
+      var last    = lastStr ? parseInt(lastStr, 10) : 0;
+      if (now - last >= NOTIF_COOLDOWN_MS) {
+        props.setProperty(key, String(now));
+        alerts.push(roomName + ': ' + cond);
+      }
+    });
+  });
+
+  // Check home-level freshness.
+  if (comfort.freshness.value === 'STUFFY') {
+    var key     = NOTIF_LAST_KEY_PREFIX + homeId + '_home_STUFFY';
+    var lastStr = props.getProperty(key);
+    var last    = lastStr ? parseInt(lastStr, 10) : 0;
+    if (now - last >= NOTIF_COOLDOWN_MS) {
+      props.setProperty(key, String(now));
+      alerts.push('Home: STUFFY');
+    }
+  }
+
+  if (!alerts.length) return;
+
+  var title       = 'Air Comfort Alert';
+  var description = alerts.join('\n');
+  sendCalendarNotification_(title, description);
+}
+
+/**
+ * Create a 1-minute Calendar event to deliver a push notification.
+ * Requires Script Property CALENDAR_NOTIFICATION_ID — the ID of a dedicated
+ * Google Calendar with its default reminder set to 0 minutes (at event time).
+ *
+ * Setup:
+ *   1. Create a calendar named e.g. "Home Notifications" in Google Calendar.
+ *   2. Set its default reminder to 0 minutes (at time of event).
+ *   3. Copy its calendar ID into Script Property CALENDAR_NOTIFICATION_ID.
+ *   4. Add https://www.googleapis.com/auth/calendar to appsscript.json oauthScopes.
+ */
+function sendCalendarNotification_(title, description) {
+  var calendarId = PropertiesService.getScriptProperties()
+                     .getProperty('CALENDAR_NOTIFICATION_ID');
+  if (!calendarId) {
+    console.warn('sendCalendarNotification_: CALENDAR_NOTIFICATION_ID not set');
+    return;
+  }
+  var cal = CalendarApp.getCalendarById(calendarId);
+  if (!cal) {
+    console.warn('sendCalendarNotification_: calendar not found — ' + calendarId);
+    return;
+  }
+  var now = new Date();
+  var end = new Date(now.getTime() + 60 * 1000);  // 1-minute event
+  var event = cal.createEvent(title, now, end, { description: description });
+  event.addPopupReminder(0);  // notify at time of event
 }
