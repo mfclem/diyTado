@@ -235,8 +235,8 @@ function generateStatesAndNotifications_(homeId, devices) {
  * humidityLevel — Dew Point (Magnus-Tetens approximation):
  *   Td = (243.04 × (ln(RH/100) + 17.625×T/(243.04+T)))
  *        / (17.625 - (ln(RH/100) + 17.625×T/(243.04+T)))
- *   Td < 12.8°C  → DRY
- *   Td 12.8–15.5°C → COMFY
+ *   Td < 10°C  → DRY
+ *   Td 10–15.5°C → COMFY
  *   Td > 15.5°C  → HUMID
  *
  * temperatureLevel — ASHRAE 55 Adaptive Comfort Model:
@@ -298,7 +298,7 @@ function computeAirComfort_(rooms, temperatureOutdoorAvg, lastOpenWindow) {
       var lnRH = Math.log(rh / 100);
       var gamma = lnRH + (17.625 * t) / (243.04 + t);
       var dewPoint = (243.04 * gamma) / (17.625 - gamma);
-      if      (dewPoint < 12.8) humidityLevel = 'DRY';
+      if      (dewPoint < 10) humidityLevel = 'DRY';
       else if (dewPoint <= 15.5) humidityLevel = 'COMFY';
       else                       humidityLevel = 'HUMID';
     }
