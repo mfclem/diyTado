@@ -81,6 +81,13 @@ function reportState() {
 }
 
 
+// Testing
+function sendCalNotif(title, description) {
+  return sendCalendarNotification_("Test - " + Date(), "Ma description\nsur plusieurs lignes\nse trouve ici.");
+}
+
+
+
 
 function generateStatesAndNotifications_(homeId, devices) {
   // var homeId = requireHomeId_();
@@ -426,6 +433,7 @@ function checkAirComfortAlerts_(homeId) {
   var lastOpenWindow = owStr ? parseInt(owStr, 10) : null;
 
   var comfort   = computeAirComfort_(rooms, tempAvg, lastOpenWindow);
+console.log("Air Comfort: " + JSON.stringify(comfort, null, 2));
   var roomsById = indexRoomsById_(rooms);
   var alerts    = [];
 
@@ -469,7 +477,8 @@ function checkAirComfortAlerts_(homeId) {
 
   var title       = 'Air Comfort Alert';
   var description = alerts.join('\n');
-  sendCalendarNotification_(title, description);
+console.log("* Air Comfort Notification *" + "\n- Title: " + title + "\n- Description:\n" + description);
+//sendCalendarNotification_(title, description);
 }
 
 /**
