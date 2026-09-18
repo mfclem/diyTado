@@ -61,7 +61,7 @@
 const REPORT_STATE_INTERVAL_SEC  = 2.5 * 60;
 const REPORT_STATE_LAST_RUN_KEY  = 'REPORT_STATE_LAST_RUN';
 const NOTIF_COOLDOWN_MS          = 60 * 60 * 1000;  // 1 hour between repeat alerts
-const NOTIF_LAST_KEY_PREFIX      = 'NOTIF_LAST_';   // + homeId_roomId_condition
+const NOTIF_LAST_KEY_PREFIX      = 'NOTIF_LAST_';   // + roomId_condition  or  STUFFY
 
 function reportState() {
   var props   = PropertiesService.getScriptProperties();
@@ -323,7 +323,6 @@ function computeAirComfort_(rooms, temperatureOutdoorAvg, lastOpenWindow) {
  * With a 30-minute weather cache TTL, up to 48 readings accumulate — small
  * enough to fit comfortably within the 9 KB Script Property limit.
  *
- * @param  {string} homeId
  * @param  {number|null} currentOutdoorTemp  Current outdoor temperature in °C,
  *         or null to skip appending (just compute mean from stored readings).
  * @return {number|null}  Mean temperature, or null if no readings available.
@@ -331,9 +330,9 @@ function computeAirComfort_(rooms, temperatureOutdoorAvg, lastOpenWindow) {
 var OUTDOOR_TEMP_READINGS_KEY = 'OUTDOOR_TEMP_READINGS';
 var OUTDOOR_TEMP_WINDOW_MS    = 24 * 60 * 60 * 1000;  // 24 hours
 
-function getOutdoorTempAvg_(homeId, currentOutdoorTemp) {
+function getOutdoorTempAvg_(currentOutdoorTemp) {
   var props    = PropertiesService.getScriptProperties();
-  var key      = OUTDOOR_TEMP_READINGS_KEY + '_' + homeId;
+  var key      = OUTDOOR_TEMP_READINGS_KEY;
   var now      = Date.now();
   var readings = [];
 
@@ -413,14 +412,22 @@ function checkAirComfortAlerts_(homeId) {
   var weather     = getCacheWeather_(homeId);
   var outdoorTemp = weather && weather.outsideTemperature
                       ? weather.outsideTemperature.celsius : null;
-  var tempAvg     = getOutdoorTempAvg_(homeId, outdoorTemp);
+  var tempAvg     = getOutdoorTempAvg_(outdoorTemp);
   if (tempAvg === null) return;  // not enough data yet for ASHRAE model
 
-  var comfort     = computeAirComfort_(rooms, tempAvg, null);
-  var roomsById   = indexRoomsById_(rooms);
-  var props       = PropertiesService.getScriptProperties();
-  var now         = Date.now();
-  var alerts      = [];
+  // Update LAST_OPEN_WINDOW whenever any room currently has an active open window.
+  // Never cleared — allows freshness to degrade to STUFFY after 8+ hours.
+  var props = PropertiesService.getScriptProperties();
+  var now   = Date.now();
+  if (rooms.some(function (r) { return !!r.openWindow; })) {
+    props.setProperty('LAST_OPEN_WINDOW', String(now));
+  }
+  var owStr          = props.getProperty('LAST_OPEN_WINDOW');
+  var lastOpenWindow = owStr ? parseInt(owStr, 10) : null;
+
+  var comfort   = computeAirComfort_(rooms, tempAvg, lastOpenWindow);
+  var roomsById = indexRoomsById_(rooms);
+  var alerts    = [];
 
   // Check per-room conditions.
   comfort.comfort.forEach(function (r) {
@@ -437,7 +444,7 @@ function checkAirComfortAlerts_(homeId) {
     }
 
     conditions.forEach(function (cond) {
-      var key     = NOTIF_LAST_KEY_PREFIX + homeId + '_' + r.roomId + '_' + cond;
+      var key     = NOTIF_LAST_KEY_PREFIX + r.roomId + '_' + cond;
       var lastStr = props.getProperty(key);
       var last    = lastStr ? parseInt(lastStr, 10) : 0;
       if (now - last >= NOTIF_COOLDOWN_MS) {
@@ -449,7 +456,7 @@ function checkAirComfortAlerts_(homeId) {
 
   // Check home-level freshness.
   if (comfort.freshness.value === 'STUFFY') {
-    var key     = NOTIF_LAST_KEY_PREFIX + homeId + '_home_STUFFY';
+    var key     = NOTIF_LAST_KEY_PREFIX + 'STUFFY';
     var lastStr = props.getProperty(key);
     var last    = lastStr ? parseInt(lastStr, 10) : 0;
     if (now - last >= NOTIF_COOLDOWN_MS) {

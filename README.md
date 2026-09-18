@@ -89,6 +89,9 @@ The following properties are written automatically by the setup functions below:
 | `GH_URL_KEY` | `setupGoogleHomeAction()` |
 | `GH_AGENT_USER_ID` | `setupGoogleHomeAction()` |
 | `GH_HOME_ID` | `setupGoogleHomeAction()` |
+| `LAST_OPEN_WINDOW` | `reportState()` — timestamp (ms) of the last detected open-window event across all rooms. Updated automatically, never cleared |
+| `REPORT_STATE_LAST_RUN` | `reportState()` — timestamp of the last execution, used for self-throttling |
+| `OUTDOOR_TEMP_READINGS` | `getOutdoorTempAvg_()` — rolling 24-hour list of outdoor temperature readings |
 
 ### GCP project
 
