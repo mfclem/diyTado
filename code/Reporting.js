@@ -83,7 +83,7 @@ function reportState() {
 
 // Testing
 function sendCalNotif() {
-  return sendCalendarNotification_("Test Air Comfort, "Ma description sur plusieurs lignes\nse trouve ici\net là aussi.");
+  return sendCalendarNotification_("Test Air Comfort", "Ma description sur plusieurs lignes\nse trouve ici\net là aussi.");
 }
 
 
