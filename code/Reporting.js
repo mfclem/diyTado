@@ -94,7 +94,6 @@ function generateStatesAndNotifications_(homeId, devices) {
   });
 
   var statesAndNotifications = { states: states };
-  };
   console.log("States and Notifications: " + JSON.stringify(statesAndNotifications, null, 2));
   return statesAndNotifications;
 }
