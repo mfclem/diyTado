@@ -505,7 +505,7 @@ function sendCalendarNotification_(title, description) {
     return;
   }
   var now = new Date();
-  var end = new Date(now.getTime() + 60 * 1000);  // 1-minute event
+  var end = new Date(now.getTime() + 3600 * 1000);  // 1-hour event
   var event = cal.createEvent(title, now, end, { description: description });
   event.addPopupReminder(0);  // notify at time of event
 }
