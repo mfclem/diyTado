@@ -485,13 +485,10 @@ console.log("Air Comfort: " + JSON.stringify(comfort, null, 2));
   if (!alerts.length) return;
 
   //var title       = 'Air Comfort Alert';
+  var title = 'Confort!' + alerts.join(', ');
   var description = alerts.join('\n');
 
-  var title = 'Confort! ';
-  title+ = alerts.join(', ');
-
 console.log("* Air Comfort Notification *" + "\n- Title: " + title + "\n- Description:\n" + description);
-
   //sendCalendarNotification_(title, description);
 }
 
