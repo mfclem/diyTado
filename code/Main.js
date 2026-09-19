@@ -26,15 +26,15 @@ function run() {
 }
 
 function readRooms() {
-  var t = Tado.create();
-  var homeId = t.getMe().homes[0].id;
-  Logger.log(t.getRooms(homeId));
+  var tado = tadoClient_()
+  var homeId = requireHomeId_();
+  Logger.log(JSON.stringify(tado.getRooms(homeId), null, 2));
 }
 
 function readWeather() {
-  var t = Tado.create();
-  var homeId = t.getMe().homes[0].id;
-  Logger.log(t.getWeather(homeId));
+  var tado = tadoClient_()
+  var homeId = requireHomeId_();
+  Logger.log(JSON.stringify(tado.getWeather(homeId), null, 2));
 }
 
 function logUserProperties() {

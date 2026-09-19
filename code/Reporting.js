@@ -249,6 +249,7 @@ function generateStatesAndNotifications_(homeId, devices) {
  *   T > T_opt + 3.5              → HOT
  *
  * airFreshness — time since last open window:
+ *   all rooms heating off → FAIR (ventilation is expected, freshness not a concern)
  *   < 4 h  → FRESH
  *   4–8 h  → FAIR
  *   > 8 h  → STUFFY
@@ -257,8 +258,16 @@ function generateStatesAndNotifications_(homeId, devices) {
 function computeAirComfort_(rooms, temperatureOutdoorAvg, lastOpenWindow) {
 
   // --- airFreshness -----------------------------------------------------------
+  // When all rooms have heating off, ventilation is expected behaviour and
+  // freshness is not a concern — always report FAIR in that case.
+  var allOff = (rooms || []).every(function (r) {
+    return !r.setting || r.setting.power !== 'ON';
+  });
+
   var freshnessValue;
-  if (lastOpenWindow) {
+  if (allOff) {
+    freshnessValue = 'FAIR';
+  } else if (lastOpenWindow) {
     var elapsedHours = (Date.now() - lastOpenWindow) / (1000 * 60 * 60);
     if (elapsedHours < 4) {
       freshnessValue = 'FRESH';
@@ -433,9 +442,9 @@ function checkAirComfortAlerts_(homeId) {
   var lastOpenWindow = owStr ? parseInt(owStr, 10) : null;
 
   var comfort   = computeAirComfort_(rooms, tempAvg, lastOpenWindow);
-console.log("Air Comfort: " + JSON.stringify(comfort, null, 2));
-  var roomsById = indexRoomsById_(rooms);
-  var alerts    = [];
+  console.log("Air Comfort: " + JSON.stringify(comfort, null, 2));
+  var roomsById    = indexRoomsById_(rooms);
+  var roomAlerts   = {};  // roomName → [conditions that passed cooldown]
 
   // Check per-room conditions.
   comfort.comfort.forEach(function (r) {
@@ -444,20 +453,9 @@ console.log("Air Comfort: " + JSON.stringify(comfort, null, 2));
                      : 'Room ' + r.roomId;
 
     var conditions = [];
-    //if (r.temperatureLevel === 'COLD' || r.temperatureLevel === 'HOT') {
-    //      conditions.push(r.temperatureLevel);
-    //}
-    if (r.temperatureLevel === 'COLD') {
-      conditions.push('froid');
-    }
-    else if (r.temperatureLevel === 'HOT') {
-      conditions.push('chaud');
-    }
-
-    if (r.humidityLevel === 'HUMID') {
-      //conditions.push('HUMID');
-      conditions.push('humide');
-    }
+    if (r.temperatureLevel === 'COLD') conditions.push('froid');
+    else if (r.temperatureLevel === 'HOT') conditions.push('chaud');
+    if (r.humidityLevel === 'HUMID') conditions.push('humide');
 
     conditions.forEach(function (cond) {
       var key     = NOTIF_LAST_KEY_PREFIX + r.roomId + '_' + cond;
@@ -465,9 +463,15 @@ console.log("Air Comfort: " + JSON.stringify(comfort, null, 2));
       var last    = lastStr ? parseInt(lastStr, 10) : 0;
       if (now - last >= NOTIF_COOLDOWN_MS) {
         props.setProperty(key, String(now));
-        alerts.push(roomName + ': ' + cond);
+        if (!roomAlerts[roomName]) roomAlerts[roomName] = [];
+        roomAlerts[roomName].push(cond);
       }
     });
+  });
+
+  // Build grouped alert lines: "Living Room: froid, humide"
+  var alerts = Object.keys(roomAlerts).map(function (name) {
+    return name + ': ' + roomAlerts[name].join(', ');
   });
 
   // Check home-level freshness.
@@ -477,7 +481,6 @@ console.log("Air Comfort: " + JSON.stringify(comfort, null, 2));
     var last    = lastStr ? parseInt(lastStr, 10) : 0;
     if (now - last >= NOTIF_COOLDOWN_MS) {
       props.setProperty(key, String(now));
-      //alerts.push('Home: STUFFY');
       alerts.push('Maison: médiocre');
     }
   }
@@ -485,11 +488,10 @@ console.log("Air Comfort: " + JSON.stringify(comfort, null, 2));
   if (!alerts.length) return;
 
   //var title       = 'Air Comfort Alert';
-  var title = 'Confort!' + alerts.join(', ');
+  var title = 'Confort!' + alerts.join('; ');
   var description = alerts.join('\n');
-
-console.log("* Air Comfort Notification *" + "\n- Title: " + title + "\n- Description:\n" + description);
-  //sendCalendarNotification_(title, description);
+  console.log("* Air Comfort Notification *" + "\n- Title: " + title + "\n- Description:\n" + description);
+  sendCalendarNotification_(title, description);
 }
 
 /**
