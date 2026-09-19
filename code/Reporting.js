@@ -83,7 +83,7 @@ function reportState() {
 
 // Testing
 function sendCalNotif() {
-  return sendCalendarNotification_("Test Air Comfort", "Ma description sur plusieurs lignes\nse trouve ici\net là aussi.");
+  return sendCalendarNotification_("Confort! Séjour: chaud, Chambre: humide, Maison: médiocre", "Séjour: chaud\nChambre: humide\nMaison: médiocre");
 }
 
 
@@ -444,11 +444,19 @@ console.log("Air Comfort: " + JSON.stringify(comfort, null, 2));
                      : 'Room ' + r.roomId;
 
     var conditions = [];
-    if (r.temperatureLevel === 'COLD' || r.temperatureLevel === 'HOT') {
-      conditions.push(r.temperatureLevel);
+    //if (r.temperatureLevel === 'COLD' || r.temperatureLevel === 'HOT') {
+    //      conditions.push(r.temperatureLevel);
+    //}
+    if (r.temperatureLevel === 'COLD') {
+      conditions.push('froid');
     }
+    else if (r.temperatureLevel === 'HOT') {
+      conditions.push('chaud');
+    }
+
     if (r.humidityLevel === 'HUMID') {
-      conditions.push('HUMID');
+      //conditions.push('HUMID');
+      conditions.push('humide');
     }
 
     conditions.forEach(function (cond) {
@@ -469,16 +477,22 @@ console.log("Air Comfort: " + JSON.stringify(comfort, null, 2));
     var last    = lastStr ? parseInt(lastStr, 10) : 0;
     if (now - last >= NOTIF_COOLDOWN_MS) {
       props.setProperty(key, String(now));
-      alerts.push('Home: STUFFY');
+      //alerts.push('Home: STUFFY');
+      alerts.push('Maison: médiocre');
     }
   }
 
   if (!alerts.length) return;
 
-  var title       = 'Air Comfort Alert';
+  //var title       = 'Air Comfort Alert';
   var description = alerts.join('\n');
+
+  var title = 'Confort! ';
+  title+ = alerts.join(', ');
+
 console.log("* Air Comfort Notification *" + "\n- Title: " + title + "\n- Description:\n" + description);
-//sendCalendarNotification_(title, description);
+
+  //sendCalendarNotification_(title, description);
 }
 
 /**
