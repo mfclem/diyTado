@@ -81,133 +81,19 @@ function reportState() {
 }
 
 
-// Testing
-function sendCalNotif() {
-  return sendCalendarNotification_("⚠️ Air Séjour: chaud, humide; Chambre: humide; Maison: confiné", "Séjour: chaud, humide\nChambre: humide\nMaison: confiné");
-}
-
-
-
-
 function generateStatesAndNotifications_(homeId, devices) {
-  // var homeId = requireHomeId_();
-  // var tado   = tadoClient_();
-  // // Fetch rooms and write to cache
-  // var rooms = tado.getRooms(homeId) || [];
-  // try { CacheService.getScriptCache().put('ROOMS_' + homeId, JSON.stringify(rooms), 300); } catch (e) {}
-  var rooms = getCacheRooms_(homeId) || [];
-
+  var rooms     = getCacheRooms_(homeId) || [];
   var roomsById = indexRoomsById_(rooms);
-
-  // Presence is fetched lazily once and written to cache
-  var presence = null, presenceFetched = false;
-  function currentPresence_() {
-    if (!presenceFetched) {
-      presenceFetched = true;
-      try {
-        var st = tado.getHomeState(homeId);
-        presence = st && st.presence;  // 'HOME' | 'AWAY'
-        try { CacheService.getScriptCache().put('PRESENCE_' + homeId, presence || '', 300); } catch (e) {}
-      } catch (e) { presence = null; }
-    }
-    return presence;
-  }
 
   var states = {};
   devices.forEach(function (d) {
     var parsed = parseDeviceId_(d.id);
-
-    if (parsed.kind === 'room') {
-      var room = roomsById[parsed.roomId];
-      if (room) {
-        var sensor  = room.sensorDataPoints || {};
-        var setting = room.setting || {};
-        var isOn    = setting.power === 'ON';
-        var online  = !room.connection || room.connection.state === 'CONNECTED';
-        // auto = no override, or NEXT_TIME_BLOCK (schedule is or will soon be in control).
-        // heat = MANUAL or TIMER hold (explicit indefinite or timed override).
-        // off  = power OFF.
-        var termType = room.manualControlTermination && room.manualControlTermination.type;
-        var mode    = isOn ? (termType === 'MANUAL' || termType === 'TIMER' ? 'heat' : 'auto') : 'off';
-
-        var state = {
-          online: online,
-          thermostatMode: mode
-        };
-        if (sensor.insideTemperature && typeof sensor.insideTemperature.value === 'number') {
-          state.thermostatTemperatureAmbient = sensor.insideTemperature.value;
-        }
-        if (sensor.humidity && typeof sensor.humidity.percentage === 'number') {
-          state.thermostatHumidityAmbient = sensor.humidity.percentage;
-        }
-        if (setting.temperature && typeof setting.temperature.value === 'number') {
-          state.thermostatTemperatureSetpoint = setting.temperature.value;
-        } else if (!isOn && typeof state.thermostatTemperatureAmbient === 'number') {
-          // Google requires a setpoint even when off; echo ambient as a placeholder.
-          state.thermostatTemperatureSetpoint = state.thermostatTemperatureAmbient;
-        }
-        states[d.id] = state;
-      }
-
-    } else if (parsed.kind === 'openwindow') {
-      var room = roomsById[parsed.roomId];
-      if (room) {
-        states[d.id] = {
-          online: true,
-          openPercent: room.openWindow ? 100 : 0
-        };
-      }
-
-    } else if (parsed.kind === 'openwindowmode') {
-      var room = roomsById[parsed.roomId];
-      if (room) {
-        states[d.id] = {
-          online: true,
-          on: !!(room.openWindow && room.openWindow.activated)
-        };
-      }
-
-    } else if (parsed.kind === 'heating') {
-      var room = roomsById[parsed.roomId];
-      if (room) {
-        var pct = room.heatingPower && typeof room.heatingPower.percentage === 'number'
-                    ? room.heatingPower.percentage : 0;
-        states[d.id] = {
-          online: true,
-          currentSensorStateData: [{ name: 'HeatingActive', currentSensorState: pct > 0 ? 'ACTIVE' : 'INACTIVE' }]
-        };
-      }
-
-    } else if (parsed.kind === 'humidity') {
-      var room = roomsById[parsed.roomId];
-      if (room) {
-        var sensor = room.sensorDataPoints || {};
-        states[d.id] = {
-          online: true,
-          humidityAmbientPercent: sensor.humidity ? sensor.humidity.percentage : 0
-        };
-      }
-
-    } else if (parsed.kind === 'resumeroom') {
-      var room = roomsById[parsed.roomId];
-      if (room) {
-        var termination = room.manualControlTermination;
-        states[d.id] = {
-          online: true,
-          on: !!(termination && termination.type === 'NEXT_TIME_BLOCK')
-        };
-      }
-
-    } else if (parsed.kind === 'presence') {
-      // Stateful presence switch — on = HOME, off = AWAY.
-      // var p = currentPresence_();
-      // states[d.id] = { online: true, on: p === 'HOME' };
-    }
-    // boost / resume (whole-home) / alloff are momentary (willReportState: false) — excluded.
+    var state  = computeDeviceState_(parsed, roomsById, null); // Pass null for presence — presence device excluded from HomeGraph push.
+    if (state) states[d.id] = state;
+    // null = momentary whole-home switch (willReportState:false) — correctly excluded.
   });
 
-  var statesAndNotifications = {
-    states: states
+  var statesAndNotifications = { states: states };
   };
   console.log("States and Notifications: " + JSON.stringify(statesAndNotifications, null, 2));
   return statesAndNotifications;
@@ -486,6 +372,10 @@ function sendCalendarNotification_(title, description) {
   var end = new Date(now.getTime() + 3600 * 1000);  // 1-hour event
   var event = cal.createEvent(title, now, end, { description: description });
   event.addPopupReminder(0);  // notify at time of event
+}
+
+function test_sendCalendarNotification() {
+  return sendCalendarNotification_("⚠️ Air Séjour: chaud, humide; Chambre: humide; Maison: confiné", "Séjour: chaud, humide\nChambre: humide\nMaison: confiné");
 }
 
 function getCacheRooms_(homeId) {

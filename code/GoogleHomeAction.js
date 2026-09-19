@@ -537,18 +537,91 @@ function switchDevice_(kind, homeId, name, willReportState) {
 
 // --- QUERY ------------------------------------------------------------------
 
+/**
+ * Compute state fields for a single device from room data and presence.
+ * Returns only trait state fields — no status wrapper. Callers add
+ * status:'SUCCESS' (QUERY) or use directly (HomeGraph push).
+ * Returns null for momentary whole-home switches (no persistent state).
+ *
+ * @param  {{kind:string, roomId:string}} parsed   Result of parseDeviceId_().
+ * @param  {Object} roomsById                       Rooms indexed by id.
+ * @param  {string|null} presence                   'HOME' | 'AWAY' | null.
+ * @return {Object|null}
+ */
+function computeDeviceState_(parsed, roomsById, presence) {
+  var room;
+
+  if (parsed.kind === 'room') {
+    room = roomsById[parsed.roomId];
+    if (!room) return null;
+    var sensor   = room.sensorDataPoints || {};
+    var setting  = room.setting || {};
+    var isOn     = setting.power === 'ON';
+    var online   = !room.connection || room.connection.state === 'CONNECTED';
+    var termType = room.manualControlTermination && room.manualControlTermination.type;
+    var mode     = isOn ? (termType === 'MANUAL' || termType === 'TIMER' ? 'heat' : 'auto') : 'off';
+    var state    = { online: online, thermostatMode: mode };
+    if (sensor.insideTemperature && typeof sensor.insideTemperature.value === 'number') {
+      state.thermostatTemperatureAmbient = sensor.insideTemperature.value;
+    }
+    if (sensor.humidity && typeof sensor.humidity.percentage === 'number') {
+      state.thermostatHumidityAmbient = sensor.humidity.percentage;
+    }
+    if (setting.temperature && typeof setting.temperature.value === 'number') {
+      state.thermostatTemperatureSetpoint = setting.temperature.value;
+    } else if (!isOn && typeof state.thermostatTemperatureAmbient === 'number') {
+      state.thermostatTemperatureSetpoint = state.thermostatTemperatureAmbient;
+    }
+    return state;
+
+  } else if (parsed.kind === 'openwindow') {
+    room = roomsById[parsed.roomId];
+    if (!room) return null;
+    return { online: true, openPercent: room.openWindow ? 100 : 0 };
+
+  } else if (parsed.kind === 'openwindowmode') {
+    room = roomsById[parsed.roomId];
+    if (!room) return null;
+    return { online: true, on: !!(room.openWindow && room.openWindow.activated) };
+
+  } else if (parsed.kind === 'heating') {
+    room = roomsById[parsed.roomId];
+    if (!room) return null;
+    var pct = room.heatingPower && typeof room.heatingPower.percentage === 'number'
+                ? room.heatingPower.percentage : 0;
+    return { online: true, currentSensorStateData: [{ name: 'HeatingActive', currentSensorState: pct > 0 ? 'ACTIVE' : 'INACTIVE' }] };
+
+  } else if (parsed.kind === 'humidity') {
+    room = roomsById[parsed.roomId];
+    if (!room) return null;
+    var sensor = room.sensorDataPoints || {};
+    return { online: true, humidityAmbientPercent: sensor.humidity ? sensor.humidity.percentage : 0 };
+
+  } else if (parsed.kind === 'resumeroom') {
+    room = roomsById[parsed.roomId];
+    if (!room) return null;
+    var termination = room.manualControlTermination;
+    return { online: true, on: !!(termination && termination.type === 'NEXT_TIME_BLOCK') };
+
+  } else if (parsed.kind === 'presence') {
+    if (presence === null) return null;  // unknown presence — exclude from push
+    return { online: true, on: presence === 'HOME' };
+
+  }
+
+  return null;  // momentary whole-home switches (boost, alloff, resume)
+}
+
 function onQuery_(payload) {
   var homeId = requireHomeId_();
   var wanted = (payload && payload.devices) || [];
   var tado   = tadoClient_();
 
-  //Logger.log("onQuery");
+  console.log("onQuery");
 
-  // One rooms call, indexed by room id, reused for every requested device.
   var roomsById = indexRoomsById_(tado.getRooms(homeId) || []);
 
-  // Home presence is fetched lazily and only once per request — served from a
-  // short-lived cache so repeated QUERY calls don't each hit tado° live.
+  // Presence fetched lazily once — served from cache when available.
   var presence = null, presenceFetched = false;
   function currentPresence_() {
     if (!presenceFetched) {
@@ -559,11 +632,11 @@ function onQuery_(payload) {
       if (hit !== null) {
         presence = hit || null;
       } else {
-      try {
-        var st = tado.getHomeState(homeId);
+        try {
+          var st = tado.getHomeState(homeId);
           presence = st && st.presence;
           try { cache.put(key, presence || '', 300); } catch (e) {}
-      } catch (e) { presence = null; }
+        } catch (e) { presence = null; }
       }
     }
     return presence;
@@ -572,78 +645,22 @@ function onQuery_(payload) {
   var out = {};
   wanted.forEach(function (d) {
     var parsed = parseDeviceId_(d.id);
-    if (parsed.kind === 'room') {
-      var room = roomsById[parsed.roomId];
-      out[d.id] = room ? roomToQueryState_(room) : { online: false, status: 'ERROR', errorCode: 'deviceNotFound' };
-    } else if (parsed.kind === 'openwindow') {
-      var room = roomsById[parsed.roomId];
-      // openWindow is non-null when a window is detected (activated or not).
-      out[d.id] = { online: true, status: 'SUCCESS', openPercent: (room && room.openWindow) ? 100 : 0 };
-    } else if (parsed.kind === 'openwindowmode') {
-      var room = roomsById[parsed.roomId];
-      // activated:true means heating is suspended; activated:false means detected but not yet accepted.
-      out[d.id] = { online: true, status: 'SUCCESS', on: !!(room && room.openWindow && room.openWindow.activated) };
-    } else if (parsed.kind === 'heating') {
-      var room = roomsById[parsed.roomId];
-      var pct  = room && room.heatingPower && typeof room.heatingPower.percentage === 'number'
-                   ? room.heatingPower.percentage : 0;
-      out[d.id] = {
-        online: true,
-        status: 'SUCCESS',
-        currentSensorStateData: [{ name: 'HeatingActive', currentSensorState: pct > 0 ? 'ACTIVE' : 'INACTIVE' }]
-      };
-    } else if (parsed.kind === 'humidity') {
-      var room = roomsById[parsed.roomId];
-      var pct  = room && room.sensorDataPoints && room.sensorDataPoints.humidity
-                   ? room.sensorDataPoints.humidity.percentage : 0;
-      out[d.id] = { online: true, status: 'SUCCESS', humidityAmbientPercent: pct };
-    } else if (parsed.kind === 'resumeroom') {
-      var room = roomsById[parsed.roomId];
-      var termination = room && room.manualControlTermination;
-      out[d.id] = { online: true, status: 'SUCCESS', on: !!(termination && termination.type === 'NEXT_TIME_BLOCK') };
-    } else if (parsed.kind === 'presence') {
-      var p = currentPresence_();
-      out[d.id] = { online: true, status: 'SUCCESS', on: p === 'HOME' };
+
+    if (parsed.kind === 'room' && !roomsById[parsed.roomId]) {
+      out[d.id] = { online: false, status: 'ERROR', errorCode: 'deviceNotFound' };
+      return;
+    }
+
+    var state = computeDeviceState_(parsed, roomsById, currentPresence_());
+    if (state) {
+      out[d.id] = Object.assign({ status: 'SUCCESS' }, state);
     } else {
-      // boost / resume (whole-home) / alloff are momentary actions with no persistent state.
+      // Momentary whole-home switches (boost, alloff, resume) — always OFF.
       out[d.id] = { online: true, status: 'SUCCESS', on: false };
     }
   });
 
   return { devices: out };
-}
-
-/** Map a tado°X room object to a Google TemperatureSetting state block. */
-function roomToQueryState_(room) {
-  var sensor  = room.sensorDataPoints || {};
-  var setting = room.setting || {};
-  var isOn    = setting.power === 'ON';
-  var online  = !room.connection || room.connection.state === 'CONNECTED';
-
-  // auto = no override, or NEXT_TIME_BLOCK (schedule is or will soon be in control).
-  // heat = MANUAL or TIMER hold (explicit indefinite or timed override).
-  // off  = power OFF.
-  var termType = room.manualControlTermination && room.manualControlTermination.type;
-  var mode = isOn ? (termType === 'MANUAL' || termType === 'TIMER' ? 'heat' : 'auto') : 'off';
-
-  var state = {
-    online: online,
-    status: 'SUCCESS',
-    thermostatMode: mode
-  };
-  if (sensor.insideTemperature && typeof sensor.insideTemperature.value === 'number') {
-    state.thermostatTemperatureAmbient = sensor.insideTemperature.value;
-  }
-  if (sensor.humidity && typeof sensor.humidity.percentage === 'number') {
-    state.thermostatHumidityAmbient = sensor.humidity.percentage;
-  }
-  if (setting.temperature && typeof setting.temperature.value === 'number') {
-    state.thermostatTemperatureSetpoint = setting.temperature.value;
-  } else if (!isOn && typeof state.thermostatTemperatureAmbient === 'number') {
-    // Google requires a setpoint even when off; echo ambient as a placeholder.
-    state.thermostatTemperatureSetpoint = state.thermostatTemperatureAmbient;
-  }
-  return state;
 }
 
 // --- EXECUTE ----------------------------------------------------------------
