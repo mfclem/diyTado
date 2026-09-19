@@ -83,7 +83,7 @@ function reportState() {
 
 // Testing
 function sendCalNotif() {
-  return sendCalendarNotification_("Confort! Séjour: chaud, Chambre: humide, Maison: médiocre", "Séjour: chaud\nChambre: humide\nMaison: médiocre");
+  return sendCalendarNotification_("⚠️ Air Séjour: chaud, humide; Chambre: humide; Maison: confiné", "Séjour: chaud, humide\nChambre: humide\nMaison: confiné");
 }
 
 
@@ -481,14 +481,14 @@ function checkAirComfortAlerts_(homeId) {
     var last    = lastStr ? parseInt(lastStr, 10) : 0;
     if (now - last >= NOTIF_COOLDOWN_MS) {
       props.setProperty(key, String(now));
-      alerts.push('Maison: médiocre');
+      alerts.push('Maison: confiné');
     }
   }
 
   if (!alerts.length) return;
 
   //var title       = 'Air Comfort Alert';
-  var title = 'Confort!' + alerts.join('; ');
+  var title = '⚠️ Air ' + alerts.join('; ');
   var description = alerts.join('\n');
   console.log("* Air Comfort Notification *" + "\n- Title: " + title + "\n- Description:\n" + description);
   sendCalendarNotification_(title, description);

@@ -14,6 +14,9 @@ automations:
         devices:
           - Séjour open window mode - Séjour
         on: true
+      - type: home.command.Notification
+        title: 🛋️ Fenêtre ouverte
+        body: Le chauffage du Séjour a été coupé.
 
   - name: Fenêtre Chambre ouverte (chauffage Chambre off)
     starters:
@@ -26,3 +29,7 @@ automations:
         devices:
           - Chambre open window mode - Chambre
         on: true
+      - type: home.command.Notification
+        title: 🛏️ Fenêtre ouverte
+        body: Le chauffage de la Chambre a été coupé.
+
