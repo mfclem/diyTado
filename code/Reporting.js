@@ -214,6 +214,91 @@ function generateStatesAndNotifications_(homeId, devices) {
 }
 
 /**
+ * Compute air comfort for all rooms and send a single Calendar notification
+ * if any alert-worthy condition is detected, subject to per-condition cooldown.
+ *
+ * Alert conditions:
+ *   temperatureLevel : COLD or HOT
+ *   humidityLevel    : HUMID
+ *   freshness        : STUFFY
+ *
+ * Cooldown: NOTIF_COOLDOWN_MS (1 hour) per condition per room, stored in
+ * Script Properties under NOTIF_LAST_<homeId>_<roomId>_<condition>.
+ */
+function checkAirComfortAlerts_(homeId) {
+  var rooms   = getCacheRooms_(homeId);
+  if (!rooms || !rooms.length) return;
+
+  var weather     = getCacheWeather_(homeId);
+  var outdoorTemp = weather && weather.outsideTemperature
+                      ? weather.outsideTemperature.celsius : null;
+  var tempAvg     = getOutdoorTempAvg_(outdoorTemp);
+  if (tempAvg === null) return;  // not enough data yet for ASHRAE model
+
+  // Update LAST_OPEN_WINDOW whenever any room currently has an active open window.
+  // Never cleared — allows freshness to degrade to STUFFY after 8+ hours.
+  var props = PropertiesService.getScriptProperties();
+  var now   = Date.now();
+  if (rooms.some(function (r) { return !!r.openWindow; })) {
+    props.setProperty('LAST_OPEN_WINDOW', String(now));
+  }
+  var owStr          = props.getProperty('LAST_OPEN_WINDOW');
+  var lastOpenWindow = owStr ? parseInt(owStr, 10) : null;
+
+  var comfort   = computeAirComfort_(rooms, tempAvg, lastOpenWindow);
+  console.log("Air Comfort: " + JSON.stringify(comfort, null, 2));
+  var roomsById    = indexRoomsById_(rooms);
+  var roomAlerts   = {};  // roomName → [conditions that passed cooldown]
+
+  // Check per-room conditions.
+  comfort.comfort.forEach(function (r) {
+    var roomName = roomsById[String(r.roomId)]
+                     ? roomsById[String(r.roomId)].name
+                     : 'Room ' + r.roomId;
+
+    var conditions = [];
+    if (r.temperatureLevel === 'COLD') conditions.push('froid');
+    else if (r.temperatureLevel === 'HOT') conditions.push('chaud');
+    if (r.humidityLevel === 'HUMID') conditions.push('humide');
+
+    conditions.forEach(function (cond) {
+      var key     = NOTIF_LAST_KEY_PREFIX + r.roomId + '_' + cond;
+      var lastStr = props.getProperty(key);
+      var last    = lastStr ? parseInt(lastStr, 10) : 0;
+      if (now - last >= NOTIF_COOLDOWN_MS) {
+        props.setProperty(key, String(now));
+        if (!roomAlerts[roomName]) roomAlerts[roomName] = [];
+        roomAlerts[roomName].push(cond);
+      }
+    });
+  });
+
+  // Build grouped alert lines: "Living Room: froid, humide"
+  var alerts = Object.keys(roomAlerts).map(function (name) {
+    return name + ': ' + roomAlerts[name].join(', ');
+  });
+
+  // Check home-level freshness.
+  if (comfort.freshness.value === 'STUFFY') {
+    var key     = NOTIF_LAST_KEY_PREFIX + 'STUFFY';
+    var lastStr = props.getProperty(key);
+    var last    = lastStr ? parseInt(lastStr, 10) : 0;
+    if (now - last >= NOTIF_COOLDOWN_MS) {
+      props.setProperty(key, String(now));
+      alerts.push('Maison: confiné');
+    }
+  }
+
+  if (!alerts.length) return;
+
+  //var title       = 'Air Comfort Alert';
+  var title = '⚠️ Air ' + alerts.join('; ');
+  var description = alerts.join('\n');
+  console.log("* Air Comfort Notification *" + "\n- Title: " + title + "\n- Description:\n" + description);
+  sendCalendarNotification_(title, description);
+}
+
+/**
  * Compute air comfort levels locally, replicating tado°'s airComfort endpoint
  * without requiring a paid subscription.
  *
@@ -374,6 +459,34 @@ function getOutdoorTempAvg_(currentOutdoorTemp) {
   return sum / readings.length;
 }
 
+/**
+ * Create a 1-minute Calendar event to deliver a push notification.
+ * Requires Script Property CALENDAR_NOTIFICATION_ID — the ID of a dedicated
+ * Google Calendar with its default reminder set to 0 minutes (at event time).
+ *
+ * Setup:
+ *   1. Create a calendar named e.g. "Home Notifications" in Google Calendar.
+ *   2. Set its default reminder to 0 minutes (at time of event).
+ *   3. Copy its calendar ID into Script Property CALENDAR_NOTIFICATION_ID.
+ *   4. Add https://www.googleapis.com/auth/calendar to appsscript.json oauthScopes.
+ */
+function sendCalendarNotification_(title, description) {
+  var calendarId = PropertiesService.getScriptProperties()
+                     .getProperty('CALENDAR_NOTIFICATION_ID');
+  if (!calendarId) {
+    console.warn('sendCalendarNotification_: CALENDAR_NOTIFICATION_ID not set');
+    return;
+  }
+  var cal = CalendarApp.getCalendarById(calendarId);
+  if (!cal) {
+    console.warn('sendCalendarNotification_: calendar not found — ' + calendarId);
+    return;
+  }
+  var now = new Date();
+  var end = new Date(now.getTime() + 3600 * 1000);  // 1-hour event
+  var event = cal.createEvent(title, now, end, { description: description });
+  event.addPopupReminder(0);  // notify at time of event
+}
 
 function getCacheRooms_(homeId) {
   var rooms = null;
@@ -407,118 +520,4 @@ function getCacheWeather_(homeId) {
     } catch (e) { weather = null; }
   }
   return weather;
-}
-
-/**
- * Compute air comfort for all rooms and send a single Calendar notification
- * if any alert-worthy condition is detected, subject to per-condition cooldown.
- *
- * Alert conditions:
- *   temperatureLevel : COLD or HOT
- *   humidityLevel    : HUMID
- *   freshness        : STUFFY
- *
- * Cooldown: NOTIF_COOLDOWN_MS (1 hour) per condition per room, stored in
- * Script Properties under NOTIF_LAST_<homeId>_<roomId>_<condition>.
- */
-function checkAirComfortAlerts_(homeId) {
-  var rooms   = getCacheRooms_(homeId);
-  if (!rooms || !rooms.length) return;
-
-  var weather     = getCacheWeather_(homeId);
-  var outdoorTemp = weather && weather.outsideTemperature
-                      ? weather.outsideTemperature.celsius : null;
-  var tempAvg     = getOutdoorTempAvg_(outdoorTemp);
-  if (tempAvg === null) return;  // not enough data yet for ASHRAE model
-
-  // Update LAST_OPEN_WINDOW whenever any room currently has an active open window.
-  // Never cleared — allows freshness to degrade to STUFFY after 8+ hours.
-  var props = PropertiesService.getScriptProperties();
-  var now   = Date.now();
-  if (rooms.some(function (r) { return !!r.openWindow; })) {
-    props.setProperty('LAST_OPEN_WINDOW', String(now));
-  }
-  var owStr          = props.getProperty('LAST_OPEN_WINDOW');
-  var lastOpenWindow = owStr ? parseInt(owStr, 10) : null;
-
-  var comfort   = computeAirComfort_(rooms, tempAvg, lastOpenWindow);
-  console.log("Air Comfort: " + JSON.stringify(comfort, null, 2));
-  var roomsById    = indexRoomsById_(rooms);
-  var roomAlerts   = {};  // roomName → [conditions that passed cooldown]
-
-  // Check per-room conditions.
-  comfort.comfort.forEach(function (r) {
-    var roomName = roomsById[String(r.roomId)]
-                     ? roomsById[String(r.roomId)].name
-                     : 'Room ' + r.roomId;
-
-    var conditions = [];
-    if (r.temperatureLevel === 'COLD') conditions.push('froid');
-    else if (r.temperatureLevel === 'HOT') conditions.push('chaud');
-    if (r.humidityLevel === 'HUMID') conditions.push('humide');
-
-    conditions.forEach(function (cond) {
-      var key     = NOTIF_LAST_KEY_PREFIX + r.roomId + '_' + cond;
-      var lastStr = props.getProperty(key);
-      var last    = lastStr ? parseInt(lastStr, 10) : 0;
-      if (now - last >= NOTIF_COOLDOWN_MS) {
-        props.setProperty(key, String(now));
-        if (!roomAlerts[roomName]) roomAlerts[roomName] = [];
-        roomAlerts[roomName].push(cond);
-      }
-    });
-  });
-
-  // Build grouped alert lines: "Living Room: froid, humide"
-  var alerts = Object.keys(roomAlerts).map(function (name) {
-    return name + ': ' + roomAlerts[name].join(', ');
-  });
-
-  // Check home-level freshness.
-  if (comfort.freshness.value === 'STUFFY') {
-    var key     = NOTIF_LAST_KEY_PREFIX + 'STUFFY';
-    var lastStr = props.getProperty(key);
-    var last    = lastStr ? parseInt(lastStr, 10) : 0;
-    if (now - last >= NOTIF_COOLDOWN_MS) {
-      props.setProperty(key, String(now));
-      alerts.push('Maison: confiné');
-    }
-  }
-
-  if (!alerts.length) return;
-
-  //var title       = 'Air Comfort Alert';
-  var title = '⚠️ Air ' + alerts.join('; ');
-  var description = alerts.join('\n');
-  console.log("* Air Comfort Notification *" + "\n- Title: " + title + "\n- Description:\n" + description);
-  sendCalendarNotification_(title, description);
-}
-
-/**
- * Create a 1-minute Calendar event to deliver a push notification.
- * Requires Script Property CALENDAR_NOTIFICATION_ID — the ID of a dedicated
- * Google Calendar with its default reminder set to 0 minutes (at event time).
- *
- * Setup:
- *   1. Create a calendar named e.g. "Home Notifications" in Google Calendar.
- *   2. Set its default reminder to 0 minutes (at time of event).
- *   3. Copy its calendar ID into Script Property CALENDAR_NOTIFICATION_ID.
- *   4. Add https://www.googleapis.com/auth/calendar to appsscript.json oauthScopes.
- */
-function sendCalendarNotification_(title, description) {
-  var calendarId = PropertiesService.getScriptProperties()
-                     .getProperty('CALENDAR_NOTIFICATION_ID');
-  if (!calendarId) {
-    console.warn('sendCalendarNotification_: CALENDAR_NOTIFICATION_ID not set');
-    return;
-  }
-  var cal = CalendarApp.getCalendarById(calendarId);
-  if (!cal) {
-    console.warn('sendCalendarNotification_: calendar not found — ' + calendarId);
-    return;
-  }
-  var now = new Date();
-  var end = new Date(now.getTime() + 3600 * 1000);  // 1-hour event
-  var event = cal.createEvent(title, now, end, { description: description });
-  event.addPopupReminder(0);  // notify at time of event
 }
