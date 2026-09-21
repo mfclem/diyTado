@@ -60,7 +60,7 @@
 
 const REPORT_STATE_INTERVAL_SEC  = 2.5 * 60;
 const REPORT_STATE_LAST_RUN_KEY  = 'REPORT_STATE_LAST_RUN';
-const NOTIF_COOLDOWN_MS          = 60 * 60 * 1000;  // 1 hour between repeat alerts
+const NOTIF_COOLDOWN_MS          = 30 * 60 * 1000;  // 1/2 hour between repeat alerts
 const NOTIF_LAST_KEY_PREFIX      = 'NOTIF_LAST_';   // + roomId_condition  or  STUFFY
 
 function reportState() {
@@ -268,7 +268,7 @@ function computeAirComfort_(rooms, temperatureOutdoorAvg, lastOpenWindow) {
       else if (t < tOpt - 2.5)  temperatureLevel = 'COOL';
       else if (t <= tOpt + 2.5) temperatureLevel = 'COMFY';
       else if (t <= tOpt + 3.5) temperatureLevel = 'WARM';
-      else                       temperatureLevel = 'HOT';
+      else                      temperatureLevel = 'HOT';
       }
 
     // humidityLevel — Magnus-Tetens dew point
@@ -368,7 +368,7 @@ function sendCalendarNotification_(title, description) {
     return;
   }
   var now = new Date();
-  var end = new Date(now.getTime() + 3600 * 1000);  // 1-hour event
+  var end = new Date(now.getTime() + NOTIF_COOLDOWN_MS);  // 1/2 hour event
   var event = cal.createEvent(title, now, end, { description: description });
   event.addPopupReminder(0);  // notify at time of event
 }
