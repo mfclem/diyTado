@@ -104,7 +104,7 @@ function generateStatesAndNotifications_(homeId, devices) {
  *
  * Alert conditions:
  *   temperatureLevel : COLD or HOT
- *   humidityLevel    : HUMID
+ *   humidityLevel    : MUGGY
  *   freshness        : STUFFY
  *
  * Cooldown: NOTIF_COOLDOWN_MS (1 hour) per condition per room, stored in
@@ -144,7 +144,7 @@ function checkAirComfortAlerts_(homeId) {
     var conditions = [];
     if (r.temperatureLevel === 'COLD') conditions.push('froid');
     else if (r.temperatureLevel === 'HOT') conditions.push('chaud');
-    if (r.humidityLevel === 'HUMID') conditions.push('humide');
+    if (r.humidityLevel === 'MUGGY') conditions.push('lourd');
 
     conditions.forEach(function (cond) {
       var key     = NOTIF_LAST_KEY_PREFIX + r.roomId + '_' + cond;
@@ -196,7 +196,7 @@ function checkAirComfortAlerts_(homeId) {
  *   comfort: Array<{
  *     roomId: number,
  *     temperatureLevel: 'COLD'|'COOL'|'COMFY'|'WARM'|'HOT',
- *     humidityLevel: 'DRY'|'COMFY'|'HUMID'
+ *     humidityLevel: 'DRY'|'COMFY'|'HUMID'|'MUGGY'
  *   }>
  * }}
  *
@@ -207,7 +207,8 @@ function checkAirComfortAlerts_(homeId) {
  *        / (17.625 - (ln(RH/100) + 17.625×T/(243.04+T)))
  *   Td < 10°C  → DRY
  *   Td 10–16°C → COMFY
- *   Td > 16°C  → HUMID
+ *   Td 16–18°C → HUMID
+ *   Td > 18°C  → MUGGY
  *
  * temperatureLevel — ASHRAE 55 Adaptive Comfort Model:
  *   T_opt = 0.31 × T_out + 17.8   (optimal indoor temperature)
@@ -277,9 +278,10 @@ function computeAirComfort_(rooms, temperatureOutdoorAvg, lastOpenWindow) {
       var lnRH = Math.log(rh / 100);
       var gamma = lnRH + (17.625 * t) / (243.04 + t);
       var dewPoint = (243.04 * gamma) / (17.625 - gamma);
-      if      (dewPoint < 10) humidityLevel = 'DRY';
+      if      (dewPoint < 10)  humidityLevel = 'DRY';
       else if (dewPoint <= 16) humidityLevel = 'COMFY';
-      else                       humidityLevel = 'HUMID';
+      else if (dewPoint <= 18) humidityLevel = 'HUMID';
+      else                     humidityLevel = 'MUGGY';
     }
 
     return {
@@ -374,7 +376,7 @@ function sendCalendarNotification_(title, description) {
 }
 
 function test_sendCalendarNotification() {
-  return sendCalendarNotification_("⚠️ Air Séjour: chaud, humide; Chambre: humide; Maison: confiné", "Séjour: chaud, humide\nChambre: humide\nMaison: confiné");
+  return sendCalendarNotification_("⚠️ Air Séjour: chaud, lourd; Chambre: froid; Maison: confiné", "Séjour: chaud, lourd\nChambre: froid\nMaison: confiné");
 }
 
 function getCacheRooms_(homeId) {
