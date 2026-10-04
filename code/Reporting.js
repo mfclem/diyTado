@@ -81,6 +81,11 @@ function reportState() {
 }
 
 
+function supprimerProprieteRebelle() {
+  PropertiesService.getScriptProperties().deleteProperty('TADO_TOKENS');
+}
+
+
 function generateStatesAndNotifications_(homeId, devices) {
   var rooms     = getCacheRooms_(homeId) || [];
   var roomsById = indexRoomsById_(rooms);
