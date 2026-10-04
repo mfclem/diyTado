@@ -141,16 +141,12 @@ function callHomeGraphApi(endpoint, method, payload) {
     options.payload = JSON.stringify(payload);
   }
 
-  try {
-    const response = UrlFetchApp.fetch(url, options);
-    console.log('--- HomeGraph call: ' + endpoint + ' ---');
-    console.log('HTTP status: ' + response.getResponseCode());
-    console.log('Response: ' + response.getContentText());
-    return JSON.parse(response.getContentText());
-  } catch (e) {
-    console.error('HomeGraph request failed: ' + e.toString());
-    return null;
-  }
+  const response = UrlFetchApp.fetch(url, options);
+  console.log('--- HomeGraph call: ' + endpoint + ' ---');
+  console.log('HTTP status: ' + response.getResponseCode());
+  console.log('Response: ' + response.getContentText());
+  if (response.getResponseCode() !== 200) throw new Error(response.getContentText());
+  return JSON.parse(response.getContentText());
 }
 
 /**
