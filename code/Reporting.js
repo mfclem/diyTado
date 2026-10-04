@@ -74,10 +74,11 @@ function reportState() {
 
   var homeId = requireHomeId_();
 
+  // Reports devices states to Home Graph.
+  apiReportStateAndNotification(generateStatesAndNotifications_(homeId, getSyncDevicesIds_()));
+
   // Run air comfort check alongside state reporting.
   checkAirComfortAlerts_(homeId);
-
-  return apiReportStateAndNotification(generateStatesAndNotifications_(homeId, getSyncDevicesIds_()));
 }
 
 
