@@ -50,6 +50,10 @@
  *       Immediately activates the tado° schedule for ALL rooms, clearing all
  *       manual overrides at once. Distinct from per-room "Resume <Room>" which
  *       only takes effect at the next block boundary.
+ *   • "Outdoor Temperature" → THERMOSTAT (TemperatureSetting; read-only; STATEFUL)
+ *       queryOnlyTemperatureSetting:true — thermostatTemperatureAmbient reflects
+ *       tado° outdoor temperature. thermostatMode is always 'auto'. No EXECUTE.
+ *       Use in GH automations as a numeric temperature threshold trigger.
  *
  *   All SWITCH devices use OnOff. Whole-home switches and per-room resume are
  *   momentary — turning ON fires the action; they always read back OFF.
@@ -517,6 +521,21 @@ function onSync_() {
   devices.push(switchDevice_('alloff',   homeId, 'Heating Off',       false));
   devices.push(switchDevice_('resume',   homeId, 'Activate Schedule', false));
 
+  // Read-only outdoor temperature sensor backed by tado° weather data.
+  devices.push({
+    id:   deviceId_('outdoor', homeId),
+    type: 'action.devices.types.THERMOSTAT',
+    traits: ['action.devices.traits.TemperatureSetting'],
+    name: { name: 'Outdoor Temperature', defaultNames: ['tado outdoor temperature'], nicknames: ['outdoor temperature'] },
+    willReportState: true,
+    attributes: {
+      availableThermostatModes: ['auto'],
+      thermostatTemperatureUnit: 'C',
+      queryOnlyTemperatureSetting: true
+    },
+    deviceInfo: { manufacturer: 'tado', model: 'tado-X-weather' }
+  });
+
   return {
     agentUserId: props.getProperty(GH.AGENT_USER_ID) || ('tado-' + homeId),
     devices: devices
@@ -546,9 +565,10 @@ function switchDevice_(kind, homeId, name, willReportState) {
  * @param  {{kind:string, roomId:string}} parsed   Result of parseDeviceId_().
  * @param  {Object} roomsById                       Rooms indexed by id.
  * @param  {string|null} presence                   'HOME' | 'AWAY' | null.
+ * @param  {Object|null} weather                    tado° weather object, or null.
  * @return {Object|null}
  */
-function computeDeviceState_(parsed, roomsById, presence) {
+function computeDeviceState_(parsed, roomsById, presence, weather) {
   var room;
 
   if (parsed.kind === 'room') {
@@ -607,6 +627,12 @@ function computeDeviceState_(parsed, roomsById, presence) {
     if (presence === null) return null;  // unknown presence — exclude from push
     return { online: true, on: presence === 'HOME' };
 
+  } else if (parsed.kind === 'outdoor') {
+    var temp = weather && weather.outsideTemperature && typeof weather.outsideTemperature.celsius === 'number'
+                 ? weather.outsideTemperature.celsius : null;
+    if (temp === null) return null;
+    return { online: true, thermostatMode: 'auto', thermostatTemperatureAmbient: temp };
+
   }
 
   return null;  // momentary whole-home switches (boost, alloff, resume)
@@ -621,27 +647,6 @@ function onQuery_(payload) {
 
   var roomsById = indexRoomsById_(tado.getRooms(homeId) || []);
 
-  // Presence fetched lazily once — served from cache when available.
-  var presence = null, presenceFetched = false;
-  function currentPresence_() {
-    if (!presenceFetched) {
-      presenceFetched = true;
-      var cache = CacheService.getScriptCache();
-      var key   = 'PRESENCE_' + homeId;
-      var hit   = cache.get(key);
-      if (hit !== null) {
-        presence = hit || null;
-      } else {
-        try {
-          var st = tado.getHomeState(homeId);
-          presence = st && st.presence;
-          try { cache.put(key, presence || '', 300); } catch (e) {}
-        } catch (e) { presence = null; }
-      }
-    }
-    return presence;
-  }
-
   var out = {};
   wanted.forEach(function (d) {
     var parsed = parseDeviceId_(d.id);
@@ -651,7 +656,24 @@ function onQuery_(payload) {
       return;
     }
 
-    var state = computeDeviceState_(parsed, roomsById, currentPresence_());
+    var presence = null;
+    if (parsed.kind === 'presence') {
+      var cache = CacheService.getScriptCache();
+      var hit   = cache.get('PRESENCE_' + homeId);
+      if (hit !== null) {
+        presence = hit || null;
+      } else {
+        try {
+          var st = tado.getHomeState(homeId);
+          presence = st && st.presence;
+          try { cache.put('PRESENCE_' + homeId, presence || '', 300); } catch (e) {}
+        } catch (e) {}
+      }
+    }
+
+    var weather = parsed.kind === 'outdoor' ? getCacheWeather_(homeId) : null;
+
+    var state = computeDeviceState_(parsed, roomsById, presence, weather);
     if (state) {
       out[d.id] = Object.assign({ status: 'SUCCESS' }, state);
     } else {
@@ -813,7 +835,7 @@ function onDisconnect_() {
 //          heating-<homeId>-<roomId>         heating sensor
 //          humidity-<homeId>-<roomId>        humidity sensor
 //          resumeroom-<homeId>-<roomId>      per-room resume switch
-//          <kind>-<homeId>                   whole-home switches (presence/boost/alloff/resume)
+//          <kind>-<homeId>                   whole-home switches (presence/boost/alloff/resume/outdoor)
 
 function deviceId_(kind, homeId, roomId) {
   var id = kind + '-' + homeId;

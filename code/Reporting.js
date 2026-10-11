@@ -38,6 +38,10 @@
  *   • "Presence" switch  (willReportState: true)
  *       Reports: on = (tado° presence === 'HOME'), off = AWAY.
  *
+ *   • "Outdoor Temperature" thermostat  (willReportState: true)
+ *       Reports: thermostatTemperatureAmbient = tado° outsideTemperature.celsius.
+ *       thermostatMode is always 'auto' (queryOnlyTemperatureSetting device).
+ *
  *   • "Boost Heating" / "Activate Schedule" / "Heating Off" whole-home switches  (willReportState: false)
  *   • "Resume <Room>" when momentary  (willReportState: false)
  *       Momentary — excluded from proactive reporting.
@@ -51,7 +55,7 @@
  * AIR COMFORT — computeAirComfort_(rooms, temperatureOutdoorAvg, lastOpenWindow)
  * -------------------------------------------------------------------------------
  * Local replication of tado°'s paid airComfort endpoint using:
- *   • Magnus-Tetens dew point → humidityLevel (DRY / COMFY / HUMID)
+ *   • Magnus-Tetens dew point → humidityLevel (DRY / COMFY / HUMID / MUGGY)
  *   • ASHRAE 55 Adaptive Comfort Model → temperatureLevel (COLD / COOL / COMFY / WARM / HOT)
  *   • Time-since-last-open-window → airFreshness (FRESH / FAIR / STUFFY)
  * See function JSDoc for full algorithm details.
@@ -85,11 +89,12 @@ function reportState() {
 function generateStatesAndNotifications_(homeId, devices) {
   var rooms     = getCacheRooms_(homeId) || [];
   var roomsById = indexRoomsById_(rooms);
+  var weather   = getCacheWeather_(homeId);
 
   var states = {};
   devices.forEach(function (d) {
     var parsed = parseDeviceId_(d.id);
-    var state  = computeDeviceState_(parsed, roomsById, null); // Pass null for presence — presence device excluded from HomeGraph push.
+    var state  = computeDeviceState_(parsed, roomsById, null, weather); // Pass null for presence — presence device excluded from HomeGraph push.
     if (state) states[d.id] = state;
     // null = momentary whole-home switch (willReportState:false) — correctly excluded.
   });
