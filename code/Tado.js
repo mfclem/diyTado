@@ -494,7 +494,8 @@ var Tado = (function () {
   /** POST /homes/{homeId}/rooms/{roomId}/openWindow — activate open-window. */
   TadoClient.prototype.setOpenWindow = function (homeId, roomId) {
     return this.request(hopsUrl_('/homes/' + enc_(homeId) + '/rooms/' + enc_(roomId) + '/openWindow'), {
-      method: 'post'
+      method: 'post',
+      payload: {}
     });
   };
 
@@ -508,14 +509,16 @@ var Tado = (function () {
   /** POST /homes/{homeId}/quickActions/boost — boost all rooms. */
   TadoClient.prototype.setBoost = function (homeId) {
     return this.request(hopsUrl_('/homes/' + enc_(homeId) + '/quickActions/boost'), {
-      method: 'post'
+      method: 'post',
+      payload: {}
     });
   };
 
   /** POST /homes/{homeId}/quickActions/resumeSchedule — resume schedule. */
   TadoClient.prototype.resumeSchedule = function (homeId) {
     return this.request(hopsUrl_('/homes/' + enc_(homeId) + '/quickActions/resumeSchedule'), {
-      method: 'post'
+      method: 'post',
+      payload: {}
     });
   };
 
