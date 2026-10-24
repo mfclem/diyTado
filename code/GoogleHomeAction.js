@@ -658,15 +658,15 @@ function onQuery_(payload) {
 
     var presence = null;
     if (parsed.kind === 'presence') {
-      var cache = CacheService.getScriptCache();
-      var hit   = cache.get('PRESENCE_' + homeId);
+      var props_ = PropertiesService.getScriptProperties();
+      var hit    = props_.getProperty('PRESENCE_' + homeId);
       if (hit !== null) {
         presence = hit || null;
       } else {
         try {
           var st = tado.getHomeState(homeId);
           presence = st && st.presence;
-          try { cache.put('PRESENCE_' + homeId, presence || '', 300); } catch (e) {}
+          try { props_.setProperty('PRESENCE_' + homeId, presence || ''); } catch (e) {}
         } catch (e) {}
       }
     }
@@ -802,7 +802,10 @@ function runExecution_(tado, homeId, parsed, exec) {
     // Home/Away are set via their own switches). We always echo back the
     // requested on-state so Google shows the toggle as accepted.
     switch (parsed.kind) {
-      case 'presence': tado.setPresence(homeId, on ? 'HOME' : 'AWAY'); break;
+      case 'presence':
+        tado.setPresence(homeId, on ? 'HOME' : 'AWAY');
+        try { PropertiesService.getScriptProperties().setProperty('PRESENCE_' + homeId, on ? 'HOME' : 'AWAY'); } catch (e) {}
+        break;
       case 'boost':    if (on) tado.setBoost(homeId);                  break;
       case 'alloff':   if (on) tado.turnAllRoomsOff(homeId);           break;
       case 'resume':   if (on) tado.resumeSchedule(homeId);            break;

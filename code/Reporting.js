@@ -169,14 +169,17 @@ function checkAirComfortAlerts_(homeId) {
     return name + ': ' + roomAlerts[name].join(', ');
   });
 
-  // Check home-level freshness.
+  // Check home-level freshness — only notify when someone is home.
   if (comfort.freshness.value === 'STUFFY') {
-    var key     = NOTIF_LAST_KEY_PREFIX + 'STUFFY';
-    var lastStr = props.getProperty(key);
-    var last    = lastStr ? parseInt(lastStr, 10) : 0;
-    if (now - last >= NOTIF_COOLDOWN_MS) {
-      props.setProperty(key, String(now));
-      alerts.push('Maison: confiné');
+    var presence = props.getProperty('PRESENCE_' + homeId);
+    if (presence === 'HOME') {
+      var key     = NOTIF_LAST_KEY_PREFIX + 'STUFFY';
+      var lastStr = props.getProperty(key);
+      var last    = lastStr ? parseInt(lastStr, 10) : 0;
+      if (now - last >= NOTIF_COOLDOWN_MS) {
+        props.setProperty(key, String(now));
+        alerts.push('Maison: confiné');
+      }
     }
   }
 
