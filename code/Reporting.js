@@ -197,7 +197,7 @@ function checkAirComfortAlerts_(homeId) {
  * without requiring a paid subscription.
  *
  * @param {Array}  rooms                Array of room objects as returned by getRooms().
- * @param {number} temperatureOutdoorAvg Mean outdoor temperature in °C (e.g. from getWeather()).
+ * @param {number} temperatureOutdoorAvg ASHRAE 55 EWM of daily mean outdoor temperatures (°C).
  * @param {number|null} lastOpenWindow   Timestamp (ms) of the last open-window event, or null.
  *
  * @return {{
@@ -308,51 +308,90 @@ function computeAirComfort_(rooms, temperatureOutdoorAvg, lastOpenWindow) {
 
 
 /**
- * Return the rolling 24-hour mean outdoor temperature (°C), updating the
- * stored reading list with the current weather value if available.
+ * Return the ASHRAE 55 exponentially weighted running mean (EWM) outdoor
+ * temperature over the last 7 days, updating the incremental daily mean for
+ * today with the current reading.
  *
- * Readings are stored as a JSON array of { t: timestamp_ms, v: celsius }
- * in Script Property OUTDOOR_TEMP_READINGS. On each call:
- *   1. The current outdoor temperature (from getCacheWeather_) is appended.
- *   2. Readings older than 24 hours are dropped.
- *   3. The mean of remaining readings is returned.
+ * Storage: Script Property OUTDOOR_TEMP_READINGS holds a JSON array of up to
+ * 7 entries, one per calendar day (local script timezone), newest last:
+ *   { d: 'YYYY-MM-DD', mean: number, count: number }
+ * Each call updates today's entry using an incremental mean (no raw readings
+ * kept), keeping storage at ~7 × 50 bytes regardless of call frequency.
  *
- * With a 30-minute weather cache TTL, up to 48 readings accumulate — small
- * enough to fit comfortably within the 9 KB Script Property limit.
+ * EWM formula (α = 0.8, ASHRAE 55 §5.3.3):
+ *   T_rm = (1−α) × Σ_{i=1}^{n} α^{i−1} × T_{d−i}
+ * where T_{d−i} is the daily mean i days ago. The sum is normalised so that
+ * partial history (cold-start) still yields a valid result.
  *
  * @param  {number|null} currentOutdoorTemp  Current outdoor temperature in °C,
- *         or null to skip appending (just compute mean from stored readings).
- * @return {number|null}  Mean temperature, or null if no readings available.
+ *         or null to skip updating today's mean.
+ * @return {number|null}  EWM temperature, or null if no data available yet.
  */
 var OUTDOOR_TEMP_READINGS_KEY = 'OUTDOOR_TEMP_READINGS';
-var OUTDOOR_TEMP_WINDOW_MS    = 24 * 60 * 60 * 1000;  // 24 hours
+var OUTDOOR_TEMP_EWM_ALPHA    = 0.8;
+var OUTDOOR_TEMP_DAYS         = 7;
 
 function getOutdoorTempAvg_(currentOutdoorTemp) {
-  var props    = PropertiesService.getScriptProperties();
-  var key      = OUTDOOR_TEMP_READINGS_KEY;
-  var now      = Date.now();
-  var readings = [];
+  var props = PropertiesService.getScriptProperties();
+  var today = todayDateString_();
+  var days  = [];
 
   try {
-    var raw = props.getProperty(key);
-    if (raw) readings = JSON.parse(raw);
-  } catch (e) { readings = []; }
+    var raw = props.getProperty(OUTDOOR_TEMP_READINGS_KEY);
+    if (raw) days = JSON.parse(raw);
+  } catch (e) { days = []; }
 
-  // Append current reading if provided.
+  // Update or create today's incremental mean.
   if (typeof currentOutdoorTemp === 'number' && !isNaN(currentOutdoorTemp)) {
-    readings.push({ t: now, v: currentOutdoorTemp });
+    var todayEntry = null;
+    for (var i = 0; i < days.length; i++) {
+      if (days[i].d === today) { todayEntry = days[i]; break; }
+    }
+    if (todayEntry) {
+      todayEntry.mean  = (todayEntry.mean * todayEntry.count + currentOutdoorTemp) / (todayEntry.count + 1);
+      todayEntry.count += 1;
+    } else {
+      days.push({ d: today, mean: currentOutdoorTemp, count: 1 });
+    }
   }
 
-  // Drop readings older than 24 hours.
-  var cutoff = now - OUTDOOR_TEMP_WINDOW_MS;
-  readings = readings.filter(function (r) { return r.t >= cutoff; });
+  // Keep only the last 7 days, sorted oldest→newest.
+  days.sort(function (a, b) { return a.d < b.d ? -1 : a.d > b.d ? 1 : 0; });
+  if (days.length > OUTDOOR_TEMP_DAYS) {
+    days = days.slice(days.length - OUTDOOR_TEMP_DAYS);
+  }
 
-  // Persist updated list.
-  try { props.setProperty(key, JSON.stringify(readings)); } catch (e) {}
+  try { props.setProperty(OUTDOOR_TEMP_READINGS_KEY, JSON.stringify(days)); } catch (e) {}
 
-  if (!readings.length) return null;
-  var sum = readings.reduce(function (acc, r) { return acc + r.v; }, 0);
-  return sum / readings.length;
+  if (!days.length) return null;
+
+  // ASHRAE 55 EWM: weight day[n-1] (yesterday) by (1-α)α^0, day[n-2] by (1-α)α^1, etc.
+  // today's entry is excluded — it is a partial day and not yet complete.
+  var pastDays = days.filter(function (d) { return d.d !== today; });
+  if (!pastDays.length) {
+    // Only today's partial data available — fall back to its mean.
+    return days[days.length - 1].mean;
+  }
+
+  // Iterate from most-recent past day backwards.
+  var alpha      = OUTDOOR_TEMP_EWM_ALPHA;
+  var weightSum  = 0;
+  var weightedSum = 0;
+  for (var j = 0; j < pastDays.length; j++) {
+    var w = Math.pow(alpha, j);   // j=0 → yesterday, j=1 → 2 days ago, …
+    weightedSum += w * pastDays[pastDays.length - 1 - j].mean;
+    weightSum   += w;
+  }
+  return weightedSum / weightSum;
+}
+
+/** Returns today's date as 'YYYY-MM-DD' in the script's local timezone. */
+function todayDateString_() {
+  var d = new Date();
+  var y = d.getFullYear();
+  var m = d.getMonth() + 1;
+  var day = d.getDate();
+  return y + '-' + (m < 10 ? '0' + m : m) + '-' + (day < 10 ? '0' + day : day);
 }
 
 /**
