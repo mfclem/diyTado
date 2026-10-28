@@ -57,7 +57,7 @@
  * Local replication of tado°'s paid airComfort endpoint using:
  *   • Magnus-Tetens dew point → humidityLevel (DRY / COMFY / HUMID / MUGGY)
  *   • ASHRAE 55 Adaptive Comfort Model → temperatureLevel (COLD / COOL / COMFY / WARM / HOT)
- *   • Time-since-last-open-window → airFreshness (FRESH / FAIR / STUFFY)
+ *   • Time-since-last-open-window → airFreshness (FRESH / FAIR / STALE)
  * See function JSDoc for full algorithm details.
  */
 
@@ -65,7 +65,7 @@
 const REPORT_STATE_INTERVAL_SEC  = 2.5 * 60;
 const REPORT_STATE_LAST_RUN_KEY  = 'REPORT_STATE_LAST_RUN';
 const NOTIF_COOLDOWN_MS          = 30 * 60 * 1000;  // 1/2 hour between repeat alerts
-const NOTIF_LAST_KEY_PREFIX      = 'NOTIF_LAST_';   // + roomId_condition  or  STUFFY
+const NOTIF_LAST_KEY_PREFIX      = 'NOTIF_LAST_';   // + roomId_condition  or  STALE
 
 function reportState() {
   var props   = PropertiesService.getScriptProperties();
@@ -111,7 +111,7 @@ function generateStatesAndNotifications_(homeId, devices) {
  * Alert conditions:
  *   temperatureLevel : COLD or HOT
  *   humidityLevel    : MUGGY
- *   freshness        : STUFFY
+ *   freshness        : STALE
  *
  * Cooldown: NOTIF_COOLDOWN_MS (1 hour) per condition per room, stored in
  * Script Properties under NOTIF_LAST_<homeId>_<roomId>_<condition>.
@@ -127,7 +127,7 @@ function checkAirComfortAlerts_(homeId) {
   if (tempAvg === null) return;  // not enough data yet for ASHRAE model
 
   // Update LAST_OPEN_WINDOW whenever any room currently has an active open window.
-  // Never cleared — allows freshness to degrade to STUFFY after 8+ hours.
+  // Never cleared — allows freshness to degrade to STALE after 30+ hours.
   var props = PropertiesService.getScriptProperties();
   var now   = Date.now();
   if (rooms.some(function (r) { return !!r.openWindow; })) {
@@ -170,10 +170,10 @@ function checkAirComfortAlerts_(homeId) {
   });
 
   // Check home-level freshness — only notify when someone is home.
-  if (comfort.freshness.value === 'STUFFY') {
+  if (comfort.freshness.value === 'STALE') {
     var presence = props.getProperty('PRESENCE_' + homeId);
     if (presence === 'HOME') {
-      var key     = NOTIF_LAST_KEY_PREFIX + 'STUFFY';
+      var key     = NOTIF_LAST_KEY_PREFIX + 'confiné';
       var lastStr = props.getProperty(key);
       var last    = lastStr ? parseInt(lastStr, 10) : 0;
       if (now - last >= NOTIF_COOLDOWN_MS) {
@@ -201,7 +201,7 @@ function checkAirComfortAlerts_(homeId) {
  * @param {number|null} lastOpenWindow   Timestamp (ms) of the last open-window event, or null.
  *
  * @return {{
- *   freshness: { value: 'FRESH'|'FAIR'|'STUFFY' },
+ *   freshness: { value: 'FRESH'|'FAIR'|'STALE' },
  *   comfort: Array<{
  *     roomId: number,
  *     temperatureLevel: 'COLD'|'COOL'|'COMFY'|'WARM'|'HOT',
@@ -230,9 +230,9 @@ function checkAirComfortAlerts_(homeId) {
  *
  * airFreshness — time since last open window:
  *   all rooms heating off → FAIR (ventilation is expected, freshness not a concern)
- *   < 4 h  → FRESH
- *   4–8 h  → FAIR
- *   > 8 h  → STUFFY
+ *   < 12 h  → FRESH
+ *   12–30 h → FAIR
+ *   > 30 h  → STALE
  *   null / not provided → FAIR
  */
 function computeAirComfort_(rooms, temperatureOutdoorAvg, lastOpenWindow) {
@@ -249,12 +249,12 @@ function computeAirComfort_(rooms, temperatureOutdoorAvg, lastOpenWindow) {
     freshnessValue = 'FAIR';
   } else if (lastOpenWindow) {
     var elapsedHours = (Date.now() - lastOpenWindow) / (1000 * 60 * 60);
-    if (elapsedHours < 4) {
+    if (elapsedHours < 12) {
       freshnessValue = 'FRESH';
-    } else if (elapsedHours <= 8) {
+    } else if (elapsedHours <= 30) {
       freshnessValue = 'FAIR';
     } else {
-      freshnessValue = 'STUFFY';
+      freshnessValue = 'STALE';
     }
   } else {
     freshnessValue = 'FAIR';
