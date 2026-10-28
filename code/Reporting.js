@@ -173,7 +173,7 @@ function checkAirComfortAlerts_(homeId) {
   if (comfort.freshness.value === 'STALE') {
     var presence = props.getProperty('PRESENCE_' + homeId);
     if (presence === 'HOME') {
-      var key     = NOTIF_LAST_KEY_PREFIX + 'confiné';
+      var key     = NOTIF_LAST_KEY_PREFIX + 'STALE';
       var lastStr = props.getProperty(key);
       var last    = lastStr ? parseInt(lastStr, 10) : 0;
       if (now - last >= NOTIF_COOLDOWN_MS) {
