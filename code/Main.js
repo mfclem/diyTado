@@ -37,6 +37,16 @@ function readWeather() {
   Logger.log(JSON.stringify(tado.getWeather(homeId), null, 2));
 }
 
+function cleanProperties() {
+  var props = PropertiesService.getScriptProperties();
+  
+  // OPTION A
+  props.deleteProperty("NOTIF_LAST_STUFFY");
+  
+  // OPTION B
+  // props.deleteAllProperties();
+}
+
 function logUserProperties() {
   var userProperties = PropertiesService.getUserProperties();
   var allProperties = userProperties.getProperties();
