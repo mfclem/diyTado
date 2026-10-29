@@ -90,11 +90,15 @@ function generateStatesAndNotifications_(homeId, devices) {
   var rooms     = getCacheRooms_(homeId) || [];
   var roomsById = indexRoomsById_(rooms);
   var weather   = getCacheWeather_(homeId);
+  var closest   = getClosestDeviceDistance_(homeId);
+  var distanceInfo = closest ? { brightness: computeDistanceBrightness_(closest.rel, closest.atHome) } : null;
 
   var states = {};
   devices.forEach(function (d) {
     var parsed = parseDeviceId_(d.id);
-    var state  = computeDeviceState_(parsed, roomsById, null, weather); // Pass null for presence — presence device excluded from HomeGraph push.
+    // Pass null for presence — presence on/off is excluded from HomeGraph push.
+    // distanceInfo is passed so brightness is included in the push for the presence dimmer.
+    var state  = computeDeviceState_(parsed, roomsById, weather, distanceInfo, null);
     if (state) states[d.id] = state;
     // null = momentary whole-home switch (willReportState:false) — correctly excluded.
   });
@@ -459,4 +463,47 @@ function getCacheWeather_(homeId) {
     } catch (e) { weather = null; }
   }
   return weather;
+}
+
+/**
+ * Return the raw getMobileDevices array from cache (120 s TTL), or fetch fresh.
+ */
+function getCacheMobileDevices_(homeId) {
+  var cache   = CacheService.getScriptCache();
+  var key     = 'MOBILE_DEVICES_' + homeId;
+  var devices = null;
+  var hit     = cache.get(key);
+  if (hit !== null) {
+    try { devices = JSON.parse(hit); } catch (e) { devices = null; }
+  } else {
+    try {
+      devices = tadoClient_().getMobileDevices(homeId);
+      try { cache.put(key, JSON.stringify(devices), 120); } catch (e) {}
+    } catch (e) { devices = null; }
+  }
+  return devices;
+}
+
+/**
+ * Return { rel, atHome } for the device closest to the home geofence, or null.
+ *
+ * Qualifying devices: geoTrackingEnabled === true, location present, not stale.
+ * Among qualifying devices, the one with the smallest relativeDistanceFromHomeFence
+ * is selected (0 = at fence boundary, positive = outside).
+ */
+function getClosestDeviceDistance_(homeId) {
+  var devices = getCacheMobileDevices_(homeId);
+  if (!devices) return null;
+  var best = null;
+  devices.forEach(function (d) {
+    if (!d.settings || !d.settings.geoTrackingEnabled) return;
+    var loc = d.location;
+    if (!loc || loc.stale) return;
+    var rel = typeof loc.relativeDistanceFromHomeFence === 'number'
+                ? loc.relativeDistanceFromHomeFence : Infinity;
+    if (best === null || rel < best.rel) {
+      best = { rel: rel, atHome: !!loc.atHome };
+    }
+  });
+  return best;
 }

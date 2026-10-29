@@ -40,8 +40,12 @@
  *       Turning off → converts current setting to permanent MANUAL hold (no-op if no override).
  *
  *   Whole-home:
- *   • "Presence"           → SWITCH (OnOff → presenceLock HOME/AWAY; STATEFUL)
- *       on = HOME, off = AWAY. State always reflects real tado° presence.
+ *   • "Presence"           → LIGHT (OnOff + Brightness; STATEFUL)
+ *       on = HOME, off = AWAY. State reflects real tado° presence.
+ *       brightness (0–100) = distance of the closest device from home in clamped km
+ *         (1 unit ≈ 1 km; requires Script Property TADO_FENCE_RADIUS_M).
+ *       Turning on/off sets tado° presenceLock HOME/AWAY.
+ *       brightness is queryOnlyBrightness — read via GH automations, not settable.
  *   • "Boost Heating"      → SWITCH (OnOff → quickActions/boost; momentary)
  *   • "Heating Off"        → SWITCH (OnOff → turnRoomOff on every room; momentary)
  *       Turns off all rooms with MANUAL termination. Use "Activate Schedule"
@@ -516,7 +520,17 @@ function onSync_() {
   // and respond to voice in the current Google Home app.
   // presence is stateful (on = HOME, off = AWAY) → willReportState: true.
   // boost/alloff/activate-schedule are momentary (no persistent state) → willReportState: false.
-  devices.push(switchDevice_('presence', homeId, 'Presence',          true));
+  // Presence — LIGHT with OnOff (HOME/AWAY) + read-only Brightness (distance in km).
+  // Requires Script Property TADO_FENCE_RADIUS_M (metres; default 150 if unset).
+  devices.push({
+    id:   deviceId_('presence', homeId),
+    type: 'action.devices.types.LIGHT',
+    traits: ['action.devices.traits.OnOff', 'action.devices.traits.Brightness'],
+    name: { name: 'Presence', defaultNames: ['tado presence'], nicknames: ['presence', 'distance from home'] },
+    willReportState: true,
+    attributes: { queryOnlyBrightness: true },
+    deviceInfo: { manufacturer: 'tado', model: 'tado-X-presence' }
+  });
   devices.push(switchDevice_('boost',    homeId, 'Boost Heating',     false));
   devices.push(switchDevice_('alloff',   homeId, 'Heating Off',       false));
   devices.push(switchDevice_('resume',   homeId, 'Activate Schedule', false));
@@ -564,11 +578,12 @@ function switchDevice_(kind, homeId, name, willReportState) {
  *
  * @param  {{kind:string, roomId:string}} parsed   Result of parseDeviceId_().
  * @param  {Object} roomsById                       Rooms indexed by id.
- * @param  {string|null} presence                   'HOME' | 'AWAY' | null.
  * @param  {Object|null} weather                    tado° weather object, or null.
+ * @param  {{brightness:number}|null} distanceInfo  Computed from getClosestDeviceDistance_, or null.
+ * @param  {string|null} presence                   'HOME' | 'AWAY' | null.
  * @return {Object|null}
  */
-function computeDeviceState_(parsed, roomsById, presence, weather) {
+function computeDeviceState_(parsed, roomsById, weather, distanceInfo, presence) {
   var room;
 
   if (parsed.kind === 'room') {
@@ -624,8 +639,17 @@ function computeDeviceState_(parsed, roomsById, presence, weather) {
     return { online: true, on: !!(termination && termination.type === 'NEXT_TIME_BLOCK') };
 
   } else if (parsed.kind === 'presence') {
-    if (presence === null) return null;  // unknown presence — exclude from push
-    return { online: true, on: presence === 'HOME' };
+    var st = {};
+    if (presence !== null) {
+      st.online = true;
+      st.on = presence === 'HOME';
+    }
+    if (distanceInfo && typeof distanceInfo.brightness === 'number') {
+      st.online = true;
+      st.brightness = distanceInfo.brightness;
+    }
+    if (!st.online) return null;  // neither presence nor distance known — exclude from push
+    return st;
 
   } else if (parsed.kind === 'outdoor') {
     var temp = weather && weather.outsideTemperature && typeof weather.outsideTemperature.celsius === 'number'
@@ -673,7 +697,13 @@ function onQuery_(payload) {
 
     var weather = parsed.kind === 'outdoor' ? getCacheWeather_(homeId) : null;
 
-    var state = computeDeviceState_(parsed, roomsById, presence, weather);
+    var distanceInfo = null;
+    if (parsed.kind === 'presence') {
+      var closest = getClosestDeviceDistance_(homeId);
+      if (closest) distanceInfo = { brightness: computeDistanceBrightness_(closest.rel, closest.atHome) };
+    }
+
+    var state = computeDeviceState_(parsed, roomsById, weather, distanceInfo, presence);
     if (state) {
       out[d.id] = Object.assign({ status: 'SUCCESS' }, state);
     } else {
@@ -797,10 +827,8 @@ function runExecution_(tado, homeId, parsed, exec) {
   // --- Whole-home switches (OnOff) ---
   if (cmd === 'action.devices.commands.OnOff') {
     var on = params.on === true;
-    // These are momentary actions. Turning the switch ON performs the action;
-    // turning it OFF is a no-op (there is nothing to "un-boost" cleanly, and
-    // Home/Away are set via their own switches). We always echo back the
-    // requested on-state so Google shows the toggle as accepted.
+    // Presence is stateful — on/off maps to HOME/AWAY. Boost/alloff/resume are
+    // momentary — turning ON fires the action; turning OFF is a no-op.
     switch (parsed.kind) {
       case 'presence':
         tado.setPresence(homeId, on ? 'HOME' : 'AWAY');
@@ -882,6 +910,18 @@ function clampTemp_(celsius) {
   if (c < 5)  c = 5;
   if (c > 25) c = 25;
   return Math.round(c * 10) / 10;   // tado° accepts 0.1° steps
+}
+
+/**
+ * Convert relativeDistanceFromHomeFence to a 0–100 brightness value (1 unit ≈ 1 km).
+ * Requires Script Property TADO_FENCE_RADIUS_M (default 400 m if unset).
+ */
+function computeDistanceBrightness_(rel, atHome) {
+  if (atHome) return 0;
+  var radius = Number(PropertiesService.getScriptProperties().getProperty('TADO_FENCE_RADIUS_M')) || 400;
+  var meters = (rel * radius) + radius;
+  var b = Math.round(meters / 1000);
+  return b < 0 ? 0 : b > 100 ? 100 : b;
 }
 
 /** Generate a random hex-ish token of the given length from UUIDs. */
