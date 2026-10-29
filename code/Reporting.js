@@ -465,9 +465,6 @@ function getCacheWeather_(homeId) {
   return weather;
 }
 
-/**
- * Return the raw getMobileDevices array from cache (120 s TTL), or fetch fresh.
- */
 function getCacheMobileDevices_(homeId) {
   var cache   = CacheService.getScriptCache();
   var key     = 'MOBILE_DEVICES_' + homeId;
@@ -478,7 +475,7 @@ function getCacheMobileDevices_(homeId) {
   } else {
     try {
       devices = tadoClient_().getMobileDevices(homeId);
-      try { cache.put(key, JSON.stringify(devices), 120); } catch (e) {}
+      try { cache.put(key, JSON.stringify(devices), 14 * 60); } catch (e) {}
     } catch (e) { devices = null; }
   }
   return devices;
