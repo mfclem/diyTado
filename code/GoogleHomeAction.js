@@ -131,6 +131,9 @@ var GH = {
 
 var GH_TOKEN_TTL_SEC = 24 * 60 * 60;   // lifetime we advertise for our token
 
+var PRESENCE_CACHE_KEY_PREFIX = 'PRESENCE_';  // + homeId, in ScriptCache
+var PRESENCE_CACHE_TTL_SEC    = 15 * 60;       // 15 minutes
+
 // ===========================================================================
 // One-time tado° authorization
 // ===========================================================================
@@ -682,17 +685,7 @@ function onQuery_(payload) {
 
     var presence = null;
     if (parsed.kind === 'presence') {
-      var props_ = PropertiesService.getScriptProperties();
-      var hit    = props_.getProperty('PRESENCE_' + homeId);
-      if (hit !== null) {
-        presence = hit || null;
-      } else {
-        try {
-          var st = tado.getHomeState(homeId);
-          presence = st && st.presence;
-          try { props_.setProperty('PRESENCE_' + homeId, presence || ''); } catch (e) {}
-        } catch (e) {}
-      }
+      presence = getPresence_(homeId);
     }
 
     var weather = parsed.kind === 'outdoor' ? getCacheWeather_(homeId) : null;
@@ -831,8 +824,7 @@ function runExecution_(tado, homeId, parsed, exec) {
     // momentary — turning ON fires the action; turning OFF is a no-op.
     switch (parsed.kind) {
       case 'presence':
-        tado.setPresence(homeId, on ? 'HOME' : 'AWAY');
-        try { PropertiesService.getScriptProperties().setProperty('PRESENCE_' + homeId, on ? 'HOME' : 'AWAY'); } catch (e) {}
+        setPresence_(homeId, on ? 'HOME' : 'AWAY');
         break;
       case 'boost':    if (on) tado.setBoost(homeId);                  break;
       case 'alloff':   if (on) tado.turnAllRoomsOff(homeId);           break;
@@ -884,6 +876,36 @@ function parseDeviceId_(id) {
 // ===========================================================================
 // Small helpers
 // ===========================================================================
+
+/**
+ * Return the current tado° presence ('HOME' | 'AWAY') from ScriptCache, or
+ * fetch live from tado° and populate the cache (TTL 15 min) on a miss.
+ * Returns null if the value cannot be determined.
+ */
+function getPresence_(homeId) {
+  var cache = CacheService.getScriptCache();
+  var key   = PRESENCE_CACHE_KEY_PREFIX + homeId;
+  var hit   = cache.get(key);
+  if (hit) return hit;
+  try {
+    var st = tadoClient_().getHomeState(homeId);
+    var presence = (st && st.presence) || null;
+    if (presence) cache.put(key, presence, PRESENCE_CACHE_TTL_SEC);
+    return presence;
+  } catch (e) { return null; }
+}
+
+/**
+ * Set tado° presence and update the ScriptCache so subsequent reads reflect
+ * the new value immediately without waiting for the TTL to expire.
+ */
+function setPresence_(homeId, presence) {
+  tadoClient_().setPresence(homeId, presence);
+  try {
+    CacheService.getScriptCache().put(
+      PRESENCE_CACHE_KEY_PREFIX + homeId, presence, PRESENCE_CACHE_TTL_SEC);
+  } catch (e) {}
+}
 
 function tadoClient_() {
   // Store tado° tokens in Script Properties so the Web App (executed as the

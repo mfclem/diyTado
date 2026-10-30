@@ -92,13 +92,12 @@ function generateStatesAndNotifications_(homeId, devices) {
   var weather   = getCacheWeather_(homeId);
   var closest   = getClosestDeviceDistance_(homeId);
   var distanceInfo = closest ? { brightness: computeDistanceBrightness_(closest.rel, closest.atHome) } : null;
+  var presence  = getPresence_(homeId);
 
   var states = {};
   devices.forEach(function (d) {
     var parsed = parseDeviceId_(d.id);
-    // Pass null for presence — presence on/off is excluded from HomeGraph push.
-    // distanceInfo is passed so brightness is included in the push for the presence dimmer.
-    var state  = computeDeviceState_(parsed, roomsById, weather, distanceInfo, null);
+    var state  = computeDeviceState_(parsed, roomsById, weather, distanceInfo, presence);
     if (state) states[d.id] = state;
     // null = momentary whole-home switch (willReportState:false) — correctly excluded.
   });
@@ -175,7 +174,7 @@ function checkAirComfortAlerts_(homeId) {
 
   // Check home-level freshness — only notify when someone is home.
   if (comfort.freshness.value === 'STALE') {
-    var presence = props.getProperty('PRESENCE_' + homeId);
+    var presence = getPresence_(homeId);
     if (presence === 'HOME') {
       var key     = NOTIF_LAST_KEY_PREFIX + 'STALE';
       var lastStr = props.getProperty(key);
