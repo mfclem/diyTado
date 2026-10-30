@@ -943,7 +943,8 @@ function computeDistanceBrightness_(rel, atHome) {
   var radius = Number(PropertiesService.getScriptProperties().getProperty('TADO_FENCE_RADIUS_M')) || 400;
   var meters = (rel * radius) + radius;
   var b = Math.round(meters / 1000);
-  return b < 0 ? 0 : b > 100 ? 100 : b;
+  //return b < 0 ? 0 : b > 100 ? 100 : b;
+  return 42;
 }
 
 /** Generate a random hex-ish token of the given length from UUIDs. */
