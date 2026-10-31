@@ -87,17 +87,16 @@ function reportState() {
 
 
 function generateStatesAndNotifications_(homeId, devices) {
-  var rooms     = getCacheRooms_(homeId) || [];
-  var roomsById = indexRoomsById_(rooms);
-  var weather   = getCacheWeather_(homeId);
-  var closest   = getClosestDeviceDistance_(homeId);
-  var distanceInfo = closest ? { brightness: computeDistanceBrightness_(closest.rel, closest.atHome) } : null;
-  var presence  = getPresence_(homeId);
+  var rooms         = getCacheRooms_(homeId) || [];
+  var roomsById     = indexRoomsById_(rooms);
+  var weather       = getCacheWeather_(homeId);
+  var mobileDevices = getCacheMobileDevices_(homeId);
+  var presence      = getPresence_(homeId);
 
   var states = {};
   devices.forEach(function (d) {
     var parsed = parseDeviceId_(d.id);
-    var state  = computeDeviceState_(parsed, roomsById, weather, distanceInfo, presence);
+    var state  = computeDeviceState_(parsed, roomsById, weather, mobileDevices, presence);
     if (state) states[d.id] = state;
     // null = momentary whole-home switch (willReportState:false) — correctly excluded.
   });
@@ -477,29 +476,6 @@ function getCacheMobileDevices_(homeId) {
       try { cache.put(key, JSON.stringify(devices), 14 * 60); } catch (e) {}
     } catch (e) { devices = null; }
   }
+  console.log("Mobile Devices: " + JSON.stringify(devices, null, 2));
   return devices;
-}
-
-/**
- * Return { rel, atHome } for the device closest to the home geofence, or null.
- *
- * Qualifying devices: geoTrackingEnabled === true, location present, not stale.
- * Among qualifying devices, the one with the smallest relativeDistanceFromHomeFence
- * is selected (0 = at fence boundary, positive = outside).
- */
-function getClosestDeviceDistance_(homeId) {
-  var devices = getCacheMobileDevices_(homeId);
-  if (!devices) return null;
-  var best = null;
-  devices.forEach(function (d) {
-    if (!d.settings || !d.settings.geoTrackingEnabled) return;
-    var loc = d.location;
-    if (!loc || loc.stale) return;
-    var rel = typeof loc.relativeDistanceFromHomeFence === 'number'
-                ? loc.relativeDistanceFromHomeFence : Infinity;
-    if (best === null || rel < best.rel) {
-      best = { rel: rel, atHome: !!loc.atHome };
-    }
-  });
-  return best;
 }

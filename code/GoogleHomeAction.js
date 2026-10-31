@@ -582,11 +582,11 @@ function switchDevice_(kind, homeId, name, willReportState) {
  * @param  {{kind:string, roomId:string}} parsed   Result of parseDeviceId_().
  * @param  {Object} roomsById                       Rooms indexed by id.
  * @param  {Object|null} weather                    tado° weather object, or null.
- * @param  {{brightness:number}|null} distanceInfo  Computed from getClosestDeviceDistance_, or null.
+ * @param  {Array|null}  mobileDevices               Raw getMobileDevices array, or null.
  * @param  {string|null} presence                   'HOME' | 'AWAY' | null.
  * @return {Object|null}
  */
-function computeDeviceState_(parsed, roomsById, weather, distanceInfo, presence) {
+function computeDeviceState_(parsed, roomsById, weather, mobileDevices, presence) {
   var room;
 
   if (parsed.kind === 'room') {
@@ -647,9 +647,28 @@ function computeDeviceState_(parsed, roomsById, weather, distanceInfo, presence)
       st.online = true;
       st.on = presence === 'HOME';
     }
-    if (distanceInfo && typeof distanceInfo.brightness === 'number') {
-      st.online = true;
-      st.brightness = distanceInfo.brightness;
+    if (mobileDevices) {
+      var best = null;
+      mobileDevices.forEach(function (d) {
+        if (!d.settings || !d.settings.geoTrackingEnabled) return;
+        var loc = d.location;
+        if (!loc || loc.stale) return;
+        var rel = typeof loc.relativeDistanceFromHomeFence === 'number'
+                    ? loc.relativeDistanceFromHomeFence : Infinity;
+        if (best === null || rel < best.rel) {
+          best = { rel: rel, atHome: !!loc.atHome };
+        }
+      });
+      if (best) {
+        st.online = true;
+        if (best.atHome) {
+          st.brightness = 0;
+        } else {
+          var radius = Number(PropertiesService.getScriptProperties().getProperty('TADO_FENCE_RADIUS_M')) || 400;
+          var b = Math.round(((best.rel * radius) + radius) / 1000);
+          st.brightness = b < 0 ? 0 : b > 100 ? 100 : b;
+        }
+      }
     }
     if (!st.online) return null;  // neither presence nor distance known — exclude from push
     return st;
@@ -690,13 +709,9 @@ function onQuery_(payload) {
 
     var weather = parsed.kind === 'outdoor' ? getCacheWeather_(homeId) : null;
 
-    var distanceInfo = null;
-    if (parsed.kind === 'presence') {
-      var closest = getClosestDeviceDistance_(homeId);
-      if (closest) distanceInfo = { brightness: computeDistanceBrightness_(closest.rel, closest.atHome) };
-    }
+    var mobileDevices = parsed.kind === 'presence' ? getCacheMobileDevices_(homeId) : null;
 
-    var state = computeDeviceState_(parsed, roomsById, weather, distanceInfo, presence);
+    var state = computeDeviceState_(parsed, roomsById, weather, mobileDevices, presence);
     if (state) {
       out[d.id] = Object.assign({ status: 'SUCCESS' }, state);
     } else {
@@ -932,18 +947,6 @@ function clampTemp_(celsius) {
   if (c < 5)  c = 5;
   if (c > 25) c = 25;
   return Math.round(c * 10) / 10;   // tado° accepts 0.1° steps
-}
-
-/**
- * Convert relativeDistanceFromHomeFence to a 0–100 brightness value (1 unit ≈ 1 km).
- * Requires Script Property TADO_FENCE_RADIUS_M (default 400 m if unset).
- */
-function computeDistanceBrightness_(rel, atHome) {
-  if (atHome) return 0;
-  var radius = Number(PropertiesService.getScriptProperties().getProperty('TADO_FENCE_RADIUS_M')) || 400;
-  var meters = (rel * radius) + radius;
-  var b = Math.round(meters / 1000);
-  return b < 0 ? 0 : b > 100 ? 100 : b;
 }
 
 /** Generate a random hex-ish token of the given length from UUIDs. */
