@@ -90,13 +90,13 @@ function generateStatesAndNotifications_(homeId, devices) {
   var rooms         = getCacheRooms_(homeId) || [];
   var roomsById     = indexRoomsById_(rooms);
   var weather       = getCacheWeather_(homeId);
-  var mobileDevices = getCacheMobileDevices_(homeId);
+  var distanceFromHome = getDistanceFromHome_(getCacheMobileDevices_(homeId));
   var presence      = getPresence_(homeId);
 
   var states = {};
   devices.forEach(function (d) {
     var parsed = parseDeviceId_(d.id);
-    var state  = computeDeviceState_(parsed, roomsById, weather, mobileDevices, presence);
+    var state  = computeDeviceState_(parsed, roomsById, weather, presence, distanceFromHome);
     if (state) states[d.id] = state;
     // null = momentary whole-home switch (willReportState:false) — correctly excluded.
   });
