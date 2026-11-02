@@ -875,6 +875,18 @@ function parseDeviceId_(id) {
 // ===========================================================================
 
 /**
+ * Set tado° presence and update the ScriptCache so subsequent reads reflect
+ * the new value immediately without waiting for the TTL to expire.
+ */
+function setPresence_(homeId, presence) {
+  tadoClient_().setPresence(homeId, presence);
+  try {
+    CacheService.getScriptCache().put(
+      PRESENCE_CACHE_KEY_PREFIX + homeId, presence, PRESENCE_CACHE_TTL_SEC);
+  } catch (e) {}
+}
+
+/**
  * Return the current tado° presence ('HOME' | 'AWAY') from ScriptCache, or
  * fetch live from tado° and populate the cache (TTL 15 min) on a miss.
  * Returns null if the value cannot be determined.
@@ -901,6 +913,11 @@ function getPresence_(homeId) {
  * radius is the home geofence radius in metres, read from the
  * TADO_FENCE_RADIUS_M script property (default 400 m when not set).
  *
+ * tado° encodes distance as a dimensionless relativeDistanceFromHomeFence (rel)
+ * via rel = log10(1 + x/radius) / (log10(1 + x/radius) + 1.23456789), where x
+ * is the actual distance in metres. Inverting gives:
+ *   x = radius * (10^(rel * 1.23456789 / (1 - rel)) - 1)
+ *
  * @param  {Array|null} mobileDevices  Raw getMobileDevices array, or null.
  * @return {number|null}               Distance from home in metres, or null.
  */
@@ -920,19 +937,7 @@ function getDistanceFromHome_(mobileDevices) {
   if (best === null) return null;
   if (best.atHome) return 0;
   var radius = Number(PropertiesService.getScriptProperties().getProperty('TADO_FENCE_RADIUS_M')) || 400;
-  return (best.rel * radius) + radius;
-}
-
-/**
- * Set tado° presence and update the ScriptCache so subsequent reads reflect
- * the new value immediately without waiting for the TTL to expire.
- */
-function setPresence_(homeId, presence) {
-  tadoClient_().setPresence(homeId, presence);
-  try {
-    CacheService.getScriptCache().put(
-      PRESENCE_CACHE_KEY_PREFIX + homeId, presence, PRESENCE_CACHE_TTL_SEC);
-  } catch (e) {}
+  return radius * (Math.pow(10, best.rel * 1.23456789 / (1 - best.rel)) - 1);
 }
 
 function tadoClient_() {
