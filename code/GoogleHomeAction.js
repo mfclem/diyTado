@@ -915,8 +915,9 @@ function getPresence_(homeId) {
  *
  * tado° encodes distance as a dimensionless relativeDistanceFromHomeFence (rel)
  * via rel = log10(1 + x/radius) / (log10(1 + x/radius) + 1.23456789), where x
- * is the actual distance in metres. Inverting gives:
- *   x = radius * (10^(rel * 1.23456789 / (1 - rel)) - 1)
+ * is the actual distance in metres from the fence. Inverting and adding radius
+ * to get distance from the home centre gives:
+ *   x = radius * 10^(rel * 1.23456789 / (1 - rel))
  *
  * @param  {Array|null} mobileDevices  Raw getMobileDevices array, or null.
  * @return {number|null}               Distance from home in metres, or null.
@@ -937,7 +938,7 @@ function getDistanceFromHome_(mobileDevices) {
   if (best === null) return null;
   if (best.atHome) return 0;
   var radius = Number(PropertiesService.getScriptProperties().getProperty('TADO_FENCE_RADIUS_M')) || 400;
-  return radius * (Math.pow(10, best.rel * 1.23456789 / (1 - best.rel)) - 1);
+  return radius * Math.pow(10, best.rel * 1.23456789 / (1 - best.rel));
 }
 
 function tadoClient_() {
